@@ -13,9 +13,10 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*", "<all_urls>"],
+      "matches": ["https://hiring.amazon.ca/*", "https://hiring.amazon.com/*"],
       "js": ["contentScript.bundle.js"],
-      "css": ["content.styles.css"]
+      "css": ["content.styles.css"],
+      "run_at": "document_idle"
     }
   ],
   "devtools_page": "devtools.html",
@@ -26,7 +27,10 @@
     }
   ],
   "permissions": [
-    "scripting",
-    "storage"
+    "tabs",
+    "storage",
+    "activeTab",
+    "declarativeContent",
+    "scripting"
   ]
 }

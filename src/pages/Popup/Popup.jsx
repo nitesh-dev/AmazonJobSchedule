@@ -24,12 +24,12 @@ const Popup = () => {
     activated: false,
   });
 
-  useEffect(() => {
-    // console.log(loadStorage('amazonJobData'));
-    chrome.storage.local.get('test', (result) => {
-      console.log(result);
-    });
-  }, []);
+  // useEffect(() => {
+  //   // console.log(loadStorage('amazonJobData'));
+  //   chrome.storage.local.get('test', (result) => {
+  //     console.log(result);
+  //   });
+  // }, []);
 
   function onChangeJobType(event, newValue) {
     if (!newValue) return;
@@ -63,6 +63,11 @@ const Popup = () => {
   }
 
   function onToggleActivate() {
+    let isActivated = !data.activated;
+    chrome.runtime.sendMessage({
+      action: isActivated ? 'activate' : 'deactivate',
+    });
+
     setData((prevData) => ({
       ...prevData,
       activated: !prevData.activated,
@@ -74,15 +79,15 @@ const Popup = () => {
   }, []);
 
   function loadStorage() {
-    chrome.storage.local.get(['data'], (result) => {
-      if (result.data) {
-        setData(result.data);
+    chrome.storage.local.get(['settings'], (result) => {
+      if (result.settings) {
+        setData(result.settings);
       }
     });
   }
 
   useEffect(() => {
-    chrome.storage.local.set({ data });
+    chrome.storage.local.set({ settings: data });
   }, [data]);
 
   return (
@@ -107,9 +112,9 @@ const Popup = () => {
                 }}
               >
                 <Option value="any">Any</Option>
-                <Option value="full-time">Full Time</Option>
-                <Option value="part-time">Part Time</Option>
-                <Option value="flex-time">Flex Time</Option>
+                <Option value="full time">Full Time</Option>
+                <Option value="part time">Part Time</Option>
+                <Option value="flex time">Flex Time</Option>
               </Select>
             </div>
 
@@ -175,32 +180,31 @@ const Popup = () => {
                   size="sm"
                   onChange={onChangeLocations}
                 >
-                  <Option value="Acheson">Acheson</Option>
-                  <Option value="Ajax">Ajax</Option>
-                  <Option value="Balzac">Balzac</Option>
-                  <Option value="Bolton">Bolton</Option>
-                  <Option value="Brampton">Brampton</Option>
-                  <Option value="Calgary">Calgary</Option>
-                  <Option value="Cambridge">Cambridge</Option>
-                  <Option value="Concord">Concord</Option>
-                  <Option value="Dartmouth">Dartmouth</Option>
-                  <Option value="Edmonton">Edmonton</Option>
-                  <Option value="Etobicoke">Etobicoke</Option>
-                  <Option value="Hamilton">Hamilton</Option>
-                  <Option value="Mississauga">Mississauga</Option>
-                  <Option value="Nisku">Nisku</Option>
-                  <Option value="Northborough">Northborough</Option>
-                  <Option value="Ottawa">Ottawa</Option>
-                  <Option value="Rocky View">Rocky View</Option>
-                  <Option value="Scarborough">Scarborough</Option>
-                  <Option value="Sidney">Sidney</Option>
-                  <Option value="ST. Thomas">ST. Thomas</Option>
-                  <Option value="Stoney Creek">Stoney Creek</Option>
-                  <Option value="Toronto">Toronto</Option>
-                  <Option value="Vancouver">Vancouver</Option>
-                  <Option value="Vaughan">Vaughan</Option>
-                  <Option value="Whitby">Whitby</Option>
-                  <Option value="Windsor">Windsor</Option>
+                  <Option value="acheson">Acheson</Option>
+                  <Option value="ajax">Ajax</Option>
+                  <Option value="balzac">Balzac</Option>
+                  <Option value="bolton">Bolton</Option>
+                  <Option value="brampton">Brampton</Option>
+                  <Option value="calgary">Calgary</Option>
+                  <Option value="cambridge">Cambridge</Option>
+                  <Option value="concord">Concord</Option>
+                  <Option value="dartmouth">Dartmouth</Option>
+                  <Option value="edmonton">Edmonton</Option>
+                  <Option value="etobicoke">Etobicoke</Option>
+                  <Option value="hamilton">Hamilton</Option>
+                  <Option value="mississauga">Mississauga</Option>
+                  <Option value="nisku">Nisku</Option>
+                  <Option value="northborough">Northborough</Option>
+                  <Option value="ottawa">Ottawa</Option>
+                  <Option value="rocky view">Rocky View</Option>
+                  <Option value="scarborough">Scarborough</Option>
+                  <Option value="sidney">Sidney</Option>
+                  <Option value="stoney creek">Stoney Creek</Option>
+                  <Option value="toronto">Toronto</Option>
+                  <Option value="vancouver">Vancouver</Option>
+                  <Option value="vaughan">Vaughan</Option>
+                  <Option value="whitby">Whitby</Option>
+                  <Option value="windsor">Windsor</Option>
                 </Select>
               </Card>
             </div>

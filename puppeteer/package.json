@@ -1,0 +1,20 @@
+{
+  "name": "puppeteer",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "build": "bun build index.ts --outdir dist --target node",
+    "build:extension": "cd ../ && node utils/build.js && cd ./puppeteer",
+    "start": "bun run build:extension && bun run index.ts",
+    "start:clean": "bun run index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "puppeteer": "^24.10.0"
+  }
+}

@@ -21,6 +21,7 @@ const Popup = () => {
     jobType: 'any',
     duration: 'any',
     locations: [],
+    site: 'com', // com, ca
     activated: false,
   });
 
@@ -44,6 +45,14 @@ const Popup = () => {
     setData((prevData) => ({
       ...prevData,
       duration: newValue,
+    }));
+  }
+
+  function onChangeSite(event, newValue) {
+    if (!newValue) return;
+    setData((prevData) => ({
+      ...prevData,
+      site: newValue,
     }));
   }
 
@@ -72,6 +81,12 @@ const Popup = () => {
       ...prevData,
       activated: !prevData.activated,
     }));
+
+    if (isActivated) {
+      chrome.tabs.create({
+        url: `https://hiring.amazon.${data.site}/search/warehouse-jobs#/`,
+      });
+    }
   }
 
   useEffect(() => {
@@ -134,6 +149,24 @@ const Popup = () => {
                 <Option value="any">Any</Option>
                 <Option value="regular">Regular</Option>
                 <Option value="seasonal">Seasonal</Option>
+              </Select>
+            </div>
+
+            <div>
+              <FormLabel htmlFor="site">Site</FormLabel>
+              <Select
+                defaultValue="com"
+                value={data.site}
+                onChange={onChangeSite}
+                size="sm"
+                slotProps={{
+                  button: {
+                    id: 'site',
+                  },
+                }}
+              >
+                <Option value="com">hiring.amazon.com</Option>
+                <Option value="ca">hiring.amazon.ca</Option>
               </Select>
             </div>
 

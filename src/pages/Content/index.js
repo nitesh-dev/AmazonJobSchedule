@@ -39,7 +39,7 @@ function loadStorage() {
 }
 
 async function reloadPage(site) {
-  await sleep(10000);
+  await sleep(5000);
   // reload the page
   console.log('No jobs found, reloading the page...');
 

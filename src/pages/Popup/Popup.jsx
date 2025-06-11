@@ -1,4 +1,5 @@
 import {
+  Autocomplete,
   Box,
   Button,
   Card,
@@ -24,6 +25,8 @@ const Popup = () => {
     site: 'com', // com, ca
     activated: false,
   });
+
+  const [locations, setLocations] = useState([]);
 
   // useEffect(() => {
   //   // console.log(loadStorage('amazonJobData'));
@@ -91,6 +94,12 @@ const Popup = () => {
 
   useEffect(() => {
     loadStorage();
+    console.log(localStorage.getItem('locations'));
+    chrome.storage.local.get(['locations'], (result) => {
+      if(result.locations) {
+        setLocations(result.locations);
+      }
+    });
   }, []);
 
   function loadStorage() {
@@ -208,37 +217,14 @@ const Popup = () => {
                     </Chip>
                   )}
                 </Box>
-                <Select
+                <Autocomplete options={locations} placeholder='Pick location' size='sm' onChange={onChangeLocations}/>
+                {/* <Select
                   placeholder="Pick location"
                   size="sm"
                   onChange={onChangeLocations}
                 >
-                  <Option value="acheson">Acheson</Option>
-                  <Option value="ajax">Ajax</Option>
-                  <Option value="balzac">Balzac</Option>
-                  <Option value="bolton">Bolton</Option>
-                  <Option value="brampton">Brampton</Option>
-                  <Option value="calgary">Calgary</Option>
-                  <Option value="cambridge">Cambridge</Option>
-                  <Option value="concord">Concord</Option>
-                  <Option value="dartmouth">Dartmouth</Option>
-                  <Option value="edmonton">Edmonton</Option>
-                  <Option value="etobicoke">Etobicoke</Option>
-                  <Option value="hamilton">Hamilton</Option>
-                  <Option value="mississauga">Mississauga</Option>
-                  <Option value="nisku">Nisku</Option>
-                  <Option value="northborough">Northborough</Option>
-                  <Option value="ottawa">Ottawa</Option>
-                  <Option value="rocky view">Rocky View</Option>
-                  <Option value="scarborough">Scarborough</Option>
-                  <Option value="sidney">Sidney</Option>
-                  <Option value="stoney creek">Stoney Creek</Option>
-                  <Option value="toronto">Toronto</Option>
-                  <Option value="vancouver">Vancouver</Option>
-                  <Option value="vaughan">Vaughan</Option>
-                  <Option value="whitby">Whitby</Option>
-                  <Option value="windsor">Windsor</Option>
-                </Select>
+          
+                </Select> */}
               </Card>
             </div>
             <Divider></Divider>

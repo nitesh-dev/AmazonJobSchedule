@@ -18,6 +18,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'inject') {
+    chrome.scripting.executeScript({
+      target: sender.id,
+      func: () => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/toastify-js';
+        script.type = 'text/javascript';
+        script.onload = () => console.log('Toastify loaded');
+        document.body.appendChild(script);
+      },
+    });
+  }
+});
+
+// use it for getting token
 chrome.webRequest.onBeforeSendHeaders.addListener(
   (details) => {
     console.log('Request Headers:', details.requestHeaders);

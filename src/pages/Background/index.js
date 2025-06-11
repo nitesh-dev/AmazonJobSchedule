@@ -17,3 +17,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.tabs.remove(sender.tab.id);
   }
 });
+
+chrome.webRequest.onBeforeSendHeaders.addListener(
+  (details) => {
+    console.log('Request Headers:', details.requestHeaders);
+    return {};
+  },
+  {
+    urls: [
+      'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql',
+    ],
+  },
+  ['requestHeaders']
+);

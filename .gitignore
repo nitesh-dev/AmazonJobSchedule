@@ -7,7 +7,7 @@
 /coverage
 
 # production
-/build
+build
 
 # zip
 /zip
@@ -24,3 +24,4 @@
 secrets.*.js
 bun.lock
 node_modules
+puppeteer/index.js

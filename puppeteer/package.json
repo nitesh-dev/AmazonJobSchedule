@@ -2,14 +2,17 @@
   "name": "puppeteer",
   "module": "index.ts",
   "type": "module",
+  "bin": "index.js",
   "scripts": {
-    "build": "bun build index.ts --outdir dist --target node",
-    "build:extension": "cd ../ && node utils/build.js && cd ./puppeteer",
+    "build": "bun build index.ts --outdir ./ --target node",
+    "build:extension": "cd ../ && node utils/build.js && cd ./puppeteer && cp -r ../build ./",
     "start": "bun run build:extension && bun run index.ts",
-    "start:clean": "bun run index.ts"
+    "start:clean": "bun run index.ts",
+    "build:project": "bun run build:extension && bun run build && npx pkg . --targets node18-linux-x64 --output app && chmod +x app"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "pkg": "^5.8.1"
   },
   "peerDependencies": {
     "typescript": "^5"

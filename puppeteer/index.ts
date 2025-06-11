@@ -2,6 +2,10 @@ import puppeteer from 'puppeteer';
 console.log('Hello via Bun!');
 // Or import puppeteer from 'puppeteer-core';
 
+// get working directory
+const workingDirectory = process.cwd();
+console.log(workingDirectory)
+
 // Launch the browser and open a new blank page
 const width = 1280;
 const height = 720;
@@ -11,7 +15,7 @@ const browser = await puppeteer.launch({
   headless: false,
   args: [
     '--disable-extensions-except=/home/niteshkr/Documents/Codes/others/AmazonJobSchedule/build',
-    '--load-extension=/home/niteshkr/Documents/Codes/others/AmazonJobSchedule/build',
+    '--load-extension=' + workingDirectory + '/build',
     `--window-size=${width},${height}`,
   ],
 });

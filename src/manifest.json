@@ -3,7 +3,6 @@
   "name": "Chrome Extension with React & Webpack",
   "description": "A chrome extension boilerplate built with React 17, Webpack 5, and Webpack Dev Server 4",
   "options_page": "options.html",
-  "background": { "service_worker": "background.bundle.js" },
   "version": "1.0.0",
   "action": {
     "default_popup": "popup.html",
@@ -17,7 +16,7 @@
       "matches": ["https://hiring.amazon.ca/*", "https://hiring.amazon.com/*"],
       "js": ["contentScript.bundle.js"],
       "css": ["content.styles.css"],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ],
   "devtools_page": "devtools.html",
@@ -32,6 +31,12 @@
     "storage",
     "activeTab",
     "declarativeContent",
-    "scripting"
-  ]
+    "scripting",
+    "webRequest",
+    "webRequestBlocking"
+  ],
+  "host_permissions": [
+    "https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/*"
+  ],
+  "background": { "service_worker": "background.bundle.js" }
 }

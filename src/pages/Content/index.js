@@ -80,15 +80,34 @@ async function start() {
 
   try {
     // apply for application
-    if (url.includes('/application/')) {
+    if (url.includes('application/?page')) {
       console.log('Applying for application...');
 
       // wait for selctor to be available
       await waitForSelector(['.e4s17lp0.css-1ipr55l']);
       clickElement('.e4s17lp0.css-1ipr55l');
-    } else {
-      startProcess(storage);
+      return;
+    } else if (
+      (url.includes('application/us/?CS') && url.includes('/consent')) ||
+      (url.includes('application/us/?CS') && url.includes('/pre-consent')) ||
+      (url.includes('application/us/?CS') &&
+        url.includes('/no-available-shift'))
+    ) {
+      // e4s17lp0 css-1ipr55l no-available-shift
+      // candidateId - local storage: bbCandidateId
+      let interval = setInterval(async () => {
+        if (document.URL.includes('general-questions')) {
+          clearInterval(interval);
+          return;
+        }
+        await waitForSelector(['.e4s17lp0.css-1ipr55l'], 200);
+        clickElement('.e4s17lp0.css-1ipr55l');
+        console.log('Clicked on the create button');
+      }, 500);
+
+      return;
     }
+    startProcess(storage);
   } catch (error) {
     console.error('Error in start function:', error);
   }
@@ -261,25 +280,10 @@ async function getJobs(
 ) {
   try {
     const myHeaders = new Headers();
-    myHeaders.append('accept', '*/*');
-    myHeaders.append('accept-language', 'en-GB,en;q=0.8');
+
     myHeaders.append('authorization', token);
     myHeaders.append('content-type', 'application/json');
     myHeaders.append('country', country);
-    myHeaders.append('iscanary', 'false');
-    myHeaders.append('origin', 'https://hiring.amazon.' + site);
-    myHeaders.append('priority', 'u=1, i');
-    myHeaders.append('referer', `https://hiring.amazon.${site}/`);
-    myHeaders.append(
-      'sec-ch-ua',
-      '"Brave";v="137", "Chromium";v="137", "Not/A)Brand";v="24"'
-    );
-    myHeaders.append('sec-ch-ua-mobile', '?0');
-    myHeaders.append('sec-ch-ua-platform', '"Linux"');
-    myHeaders.append('sec-fetch-dest', 'empty');
-    myHeaders.append('sec-fetch-mode', 'cors');
-    myHeaders.append('sec-fetch-site', 'cross-site');
-    myHeaders.append('sec-gpc', '1');
     myHeaders.append(
       'user-agent',
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
@@ -383,25 +387,10 @@ async function getShift(
 ) {
   try {
     const myHeaders = new Headers();
-    myHeaders.append('accept', '*/*');
-    myHeaders.append('accept-language', 'en-GB,en;q=0.6');
+
     myHeaders.append('authorization', token);
     myHeaders.append('content-type', 'application/json');
     myHeaders.append('country', country);
-    myHeaders.append('iscanary', 'false');
-    myHeaders.append('origin', 'https://hiring.amazon.' + site);
-    myHeaders.append('priority', 'u=1, i');
-    myHeaders.append('referer', `https://hiring.amazon.${site}/`);
-    myHeaders.append(
-      'sec-ch-ua',
-      '"Brave";v="137", "Chromium";v="137", "Not/A)Brand";v="24"'
-    );
-    myHeaders.append('sec-ch-ua-mobile', '?0');
-    myHeaders.append('sec-ch-ua-platform', '"Linux"');
-    myHeaders.append('sec-fetch-dest', 'empty');
-    myHeaders.append('sec-fetch-mode', 'cors');
-    myHeaders.append('sec-fetch-site', 'cross-site');
-    myHeaders.append('sec-gpc', '1');
     myHeaders.append(
       'user-agent',
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
@@ -475,6 +464,45 @@ async function getShift(
   } catch (error) {
     console.error('Error in getShift function:', error);
     return [];
+  }
+}
+
+async function createApplication(site, jobId, scheduleId) {
+  // authorization token - accessToken
+
+  try {
+    const myHeaders = new Headers();
+    myHeaders.append('authorization', localStorage.getItem('accessToken'));
+    myHeaders.append('content-type', 'application/json;charset=UTF-8');
+    myHeaders.append(
+      'user-agent',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+    );
+
+    const raw = {
+      jobId: jobId,
+      dspEnabled: true,
+      scheduleId: scheduleId,
+      candidateId: localStorage.getItem('bbCandidateId'),
+      activeApplicationCheckEnabled: true,
+    };
+
+    const requestOptions = {
+      method: 'POST',
+      headers: myHeaders,
+      body: JSON.stringify(raw),
+      redirect: 'follow',
+    };
+
+    fetch(
+      `https://hiring.amazon.${site}/application/api/candidate-application/ds/create-application/`,
+      requestOptions
+    )
+      .then((response) => response.text())
+      .then((result) => console.log(result))
+      .catch((error) => console.error(error));
+  } catch (error) {
+    console.error('Error in createApplication function:', error);
   }
 }
 

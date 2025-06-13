@@ -246,7 +246,7 @@ const Popup = () => {
                     </Chip>
                   )}
                 </Box>
-                <Autocomplete options={locations} placeholder='Pick location' size='sm' onChange={onChangeLocations}/>
+                <Autocomplete options={locations} placeholder='Pick location' size='sm' onChange={onChangeLocations} freeSolo={true} clearOnBlur={true}/>
                 {/* <Select
                   placeholder="Pick location"
                   size="sm"

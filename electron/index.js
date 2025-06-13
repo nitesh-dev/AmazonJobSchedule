@@ -1,6 +1,10 @@
 const { app, BrowserWindow } = require('electron/main');
 const { session } = require('electron');
 
+// get working directory
+const workingDirectory = process.cwd();
+console.log(workingDirectory)
+
 const createWindow = async () => {
   const win = new BrowserWindow({
     width: 800,
@@ -10,14 +14,14 @@ const createWindow = async () => {
   await win.loadURL('https://google.com');
   session.defaultSession
     .loadExtension(
-      '/home/niteshkr/Documents/Codes/others/AmazonJobSchedule/build'
+      workingDirectory + '/build'
     )
     .then(({ id }) => {
       console.log(`Extension loaded with ID: ${id}`);
       // After loading the extension, open the popup.html directly
       const extensionId = id; // Replace with actual ID from console log
       const popupUrl = `chrome-extension://${extensionId}/popup.html`;
-      const popupWin = new BrowserWindow({ width: 400, height: 600 });
+      const popupWin = new BrowserWindow({ width: 300, height: 600 });
       popupWin.loadURL(popupUrl);
     });
 };

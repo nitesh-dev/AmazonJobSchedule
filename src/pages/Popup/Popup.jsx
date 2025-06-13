@@ -24,6 +24,7 @@ const Popup = () => {
     locations: [],
     site: 'com', // com, ca
     activated: false,
+    apiCallCount: "1"
   });
 
   const [locations, setLocations] = useState([]);
@@ -64,6 +65,14 @@ const Popup = () => {
     setData((prevData) => ({
       ...prevData,
       locations: [...prevData.locations, newValue],
+    }));
+  }
+
+  function onChangeApiCallCount(event, newValue) {
+    if (!newValue) return;
+    setData((prevData) => ({
+      ...prevData,
+      apiCallCount: newValue,
     }));
   }
 
@@ -122,6 +131,26 @@ const Popup = () => {
       <Card variant="outlined">
         <FormControl>
           <Stack spacing={2}>
+            <div>
+              <FormLabel htmlFor="api-call">Api Call Concurrent</FormLabel>
+              <Select
+                defaultValue="1"
+                value={data.apiCallCount}
+                onChange={onChangeApiCallCount}
+                size="sm"
+                slotProps={{
+                  button: {
+                    id: 'api-call',
+                  },
+                }}
+              >
+                <Option value="1">1</Option>
+                <Option value="2">2</Option>
+                <Option value="3">3</Option>
+                <Option value="4">4</Option>
+                <Option value="5">5</Option>
+              </Select>
+            </div>
             <div>
               <FormLabel htmlFor="job-type">Job Type</FormLabel>
               <Select

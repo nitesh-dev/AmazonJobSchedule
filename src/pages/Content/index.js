@@ -7,7 +7,7 @@ function createToast(message, options = {}) {
     duration = 1000,
     position = 'bottom-left',
     backgroundColor = '#333',
-    textColor = '#fff'
+    textColor = '#fff',
   } = options;
 
   // Create or reuse container
@@ -65,8 +65,6 @@ function createToast(message, options = {}) {
     });
   }, duration);
 }
-
-
 
 function getToken() {
   return (
@@ -165,85 +163,87 @@ async function start() {
 
       return;
     }
-    startProcess(storage);
+    startPolling(storage);
   } catch (error) {
     console.error('Error in start function:', error);
   }
 }
 
-async function startProcess(storage) {
-  let country = storage.site === 'com' ? 'United States' : 'Canada';
-  let locale = storage.site === 'com' ? 'en-US' : 'en-CA';
-  let site = storage.site;
+let activeRequests = 0;
+let stopPolling = false;
 
-  let jobs = [];
-  while (jobs.length === 0) {
-    toast('Fetching jobs...');
-    jobs = await getJobs(getToken(), country, locale, site);
+function startPolling(storage) {
+  let MAX_CONCURRENT = parseInt(storage.apiCallCount) || 1; // Set to 2 if you want more aggressive polling
+  const interval = setInterval(async () => {
+    if (activeRequests >= MAX_CONCURRENT || stopPolling) return;
 
-    let filteredJobs = jobs.filter((item) => {
-      // check for type
-      if (storage.jobType !== 'any' && !item.type.includes(storage.jobType)) {
-        console.log(`Skipping ${item.name} due to job type filter`);
-        return false;
-      }
+    activeRequests++;
 
-      // check for duration
-      if (
-        storage.duration !== 'any' &&
-        !item.duration.includes(storage.duration)
-      ) {
-        console.log(`Skipping ${item.name} due to duration filter`);
-        return false;
-      }
+    try {
+      const country = storage.site === 'com' ? 'United States' : 'Canada';
+      const locale = storage.site === 'com' ? 'en-US' : 'en-CA';
+      const site = storage.site;
 
-      // check for location
-      let isMatch = false;
-      for (let i = 0; i < storage.locations.length; i++) {
-        const loc = storage.locations[i];
-        if (item.location.includes(loc)) {
-          isMatch = true;
-          break;
+      toast('Fetching jobs...');
+      let jobs = await getJobs(getToken(), country, locale, site);
+
+      // Filter jobs
+      jobs = jobs.filter((item) => {
+        if (storage.jobType !== 'any' && !item.type.includes(storage.jobType)) {
+          console.log(`Skipping ${item.name} due to job type filter`);
+          return false;
         }
-      }
 
-      if (storage.locations.length && isMatch === false) {
-        console.log(`Skipping ${item.name} due to location filter`);
-        return false;
-      }
+        if (
+          storage.duration !== 'any' &&
+          !item.duration.includes(storage.duration)
+        ) {
+          console.log(`Skipping ${item.name} due to duration filter`);
+          return false;
+        }
 
-      return true;
-    });
+        if (
+          storage.locations.length > 0 &&
+          !storage.locations.some((loc) => item.location.includes(loc))
+        ) {
+          console.log(`Skipping ${item.name} due to location filter`);
+          return false;
+        }
 
-    jobs = filteredJobs;
+        return true;
+      });
 
-    console.log(`Filtered jobs count: ${filteredJobs.length}`);
+      console.log(`Filtered jobs count: ${jobs.length}`);
 
-    if (!jobs.length) continue;
+      if (!jobs.length) return;
 
-    // get  random job
-    let randomJob = jobs[Math.floor(Math.random() * jobs.length)];
+      const randomJob = jobs[Math.floor(Math.random() * jobs.length)];
 
-    let shifts = await getShift(
-      randomJob.jobId,
-      getToken(),
-      country,
-      locale,
-      site
-    );
+      const shifts = await getShift(
+        randomJob.jobId,
+        getToken(),
+        country,
+        locale,
+        site
+      );
 
-    console.log('Shifts:', shifts);
+      console.log('Shifts:', shifts);
 
-    if (!shifts.length) {
-      jobs = [];
-      continue;
+      if (!shifts.length) return;
+
+      const randomShift = shifts[Math.floor(Math.random() * shifts.length)];
+
+      // 🎯 Found a match, stop future polling
+      stopPolling = true;
+      clearInterval(interval);
+
+      openApplicationPage(randomJob.jobId, randomShift.shiftId);
+    } catch (err) {
+      console.error('Error in job poller:', err);
+    } finally {
+      activeRequests--;
     }
-
-    // get random shift
-    let randomShift = shifts[Math.floor(Math.random() * shifts.length)];
-    openApplicationPage(randomJob.jobId, randomShift.shiftId);
-    break;
-  }
+  }, 200); // Try every 200ms
 }
 
 start();
@@ -255,7 +255,7 @@ function openApplicationPage(jobId, shiftId) {
 
 function toast(message) {
   console.log('Toast message:', message);
-  createToast(message)
+  createToast(message);
 }
 
 // multiple selector proceed when either one is available

@@ -2,13 +2,71 @@
 console.log('Content script works!');
 console.log('Must reload extension for modifications to take effect.');
 
-// Inject Toastify CSS
-const toastifyCSS = document.createElement('link');
-toastifyCSS.rel = 'stylesheet';
-toastifyCSS.type = 'text/css';
-toastifyCSS.href =
-  'https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css';
-document.head.appendChild(toastifyCSS);
+function createToast(message, options = {}) {
+  const {
+    duration = 1000,
+    position = 'bottom-left',
+    backgroundColor = '#333',
+    textColor = '#fff'
+  } = options;
+
+  // Create or reuse container
+  let container = document.querySelector('.__pure_toast_container');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = '__pure_toast_container';
+    container.style.position = 'fixed';
+    container.style.zIndex = '9999';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column-reverse'; // new toasts on bottom, older move up
+    container.style.gap = '10px';
+    container.style.pointerEvents = 'none';
+
+    // Positioning logic
+    if (position.includes('top')) container.style.top = '16px';
+    if (position.includes('bottom')) container.style.bottom = '16px';
+    if (position.includes('left')) container.style.left = '16px';
+    if (position.includes('right')) container.style.right = '16px';
+
+    document.body.appendChild(container);
+  }
+
+  // Create the toast
+  const toast = document.createElement('div');
+  toast.className = '__pure_toast';
+  toast.textContent = message;
+  toast.style.padding = '12px 18px';
+  toast.style.background = backgroundColor;
+  toast.style.color = textColor;
+  toast.style.borderRadius = '6px';
+  toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+  toast.style.fontSize = '14px';
+  toast.style.maxWidth = '300px';
+  toast.style.opacity = '0';
+  toast.style.transform = 'translateY(20px)';
+  toast.style.transition = 'all 0.3s ease';
+  toast.style.pointerEvents = 'auto';
+
+  container.appendChild(toast);
+
+  // Animate in
+  requestAnimationFrame(() => {
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+  });
+
+  // Animate out and remove
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-20px)';
+    toast.addEventListener('transitionend', () => {
+      toast.remove();
+      if (!container.hasChildNodes()) container.remove();
+    });
+  }, duration);
+}
+
+
 
 function getToken() {
   return (
@@ -197,19 +255,7 @@ function openApplicationPage(jobId, shiftId) {
 
 function toast(message) {
   console.log('Toast message:', message);
-  return;
-  try {
-    // eslint-disable-next-line no-undef
-    Toastify({
-      text: message,
-      className: 'info',
-      style: {
-        background: 'linear-gradient(to right, #00b09b, #96c93d)',
-      },
-    }).showToast();
-  } catch (error) {
-    console.error('Error in toast function:', error);
-  }
+  createToast(message)
 }
 
 // multiple selector proceed when either one is available

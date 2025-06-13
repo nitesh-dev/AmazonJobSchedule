@@ -7,7 +7,7 @@ const createWindow = async () => {
     height: 600,
   });
 
-  await win.loadURL('https://hiring.amazon.ca/');
+  await win.loadURL('https://google.com');
   session.defaultSession
     .loadExtension(
       '/home/niteshkr/Documents/Codes/others/AmazonJobSchedule/build'

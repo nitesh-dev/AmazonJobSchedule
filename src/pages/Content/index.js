@@ -130,7 +130,7 @@ async function start() {
   console.log({ storage });
 
   if (!storage.activated) {
-    console.log('Extension is not activated');
+    toast('Extension is not activated');
     return;
   }
 

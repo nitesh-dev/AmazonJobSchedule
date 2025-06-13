@@ -25,3 +25,4 @@ secrets.*.js
 bun.lock
 node_modules
 puppeteer/index.js
+out

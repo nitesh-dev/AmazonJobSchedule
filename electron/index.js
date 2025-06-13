@@ -1,9 +1,14 @@
 const { app, BrowserWindow } = require('electron/main');
 const { session } = require('electron');
+const path = require('path');
 
 // get working directory
-const workingDirectory = process.cwd();
-console.log(workingDirectory)
+// const workingDirectory = process.cwd();
+// console.log(workingDirectory)
+
+console.log(app.getAppPath())
+
+const extPath = path.join(app.getAppPath(), 'build');
 
 const createWindow = async () => {
   const win = new BrowserWindow({
@@ -12,18 +17,14 @@ const createWindow = async () => {
   });
 
   await win.loadURL('https://google.com');
-  session.defaultSession
-    .loadExtension(
-      workingDirectory + '/build'
-    )
-    .then(({ id }) => {
-      console.log(`Extension loaded with ID: ${id}`);
-      // After loading the extension, open the popup.html directly
-      const extensionId = id; // Replace with actual ID from console log
-      const popupUrl = `chrome-extension://${extensionId}/popup.html`;
-      const popupWin = new BrowserWindow({ width: 300, height: 600 });
-      popupWin.loadURL(popupUrl);
-    });
+  session.defaultSession.loadExtension(extPath).then(({ id }) => {
+    console.log(`Extension loaded with ID: ${id}`);
+    // After loading the extension, open the popup.html directly
+    const extensionId = id; // Replace with actual ID from console log
+    const popupUrl = `chrome-extension://${extensionId}/popup.html`;
+    const popupWin = new BrowserWindow({ width: 300, height: 600 });
+    popupWin.loadURL(popupUrl);
+  });
 };
 
 app.whenReady().then(() => {

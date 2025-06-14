@@ -6,7 +6,7 @@ const path = require('path');
 // const workingDirectory = process.cwd();
 // console.log(workingDirectory)
 
-console.log(app.getAppPath())
+console.log(app.getAppPath());
 
 const extPath = path.join(app.getAppPath(), 'build');
 
@@ -15,6 +15,7 @@ const createWindow = async () => {
     width: 800,
     height: 600,
   });
+  
 
   await win.loadURL('https://google.com');
   session.defaultSession.loadExtension(extPath).then(({ id }) => {

@@ -6,7 +6,9 @@
     "build:extension": "cd ../ && node utils/build.js && cd ./electron && cp -r ../build ./",
     "start": "npm run build:extension && electron-forge start",
     "package": "electron-forge package",
-    "make": "electron-forge make"
+    "make": "electron-forge make",
+    "make:mac": "npx electron-forge make --platform=darwin",
+    "make:all": "npx electron-forge make --win --mac"
   },
   "author": "",
   "license": "ISC",
@@ -20,7 +22,8 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.8.1",
     "@electron-forge/plugin-fuses": "^7.8.1",
     "@electron/fuses": "^1.8.0",
-    "electron": "^28.0.0"
+    "electron": "^28.0.0",
+    "electron-prebuilt-compile": "^8.2.0"
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1"

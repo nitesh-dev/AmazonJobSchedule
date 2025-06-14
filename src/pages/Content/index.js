@@ -368,7 +368,7 @@ async function getJobs(
           ],
           orFilters: [],
           dateFilters: [
-            { key: 'firstDayOnSite', range: { startDate: '2025-06-08' } },
+            { key: 'firstDayOnSite', range: { startDate: today() } },
           ],
           sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
           pageSize: 100,

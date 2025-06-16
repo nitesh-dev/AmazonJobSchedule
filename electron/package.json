@@ -5,7 +5,7 @@
   "scripts": {
     "build:extension": "cd ../ && node utils/build.js && cd ./electron && cp -r ../build ./",
     "start": "npm run build:extension && electron-forge start",
-    "package": "electron-forge package",
+    "package": "npm run build:extension && electron-forge package",
     "make": "electron-forge make",
     "make:mac": "npx electron-forge make --platform=darwin",
     "make:all": "npx electron-forge make --win --mac"

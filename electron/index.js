@@ -8,7 +8,19 @@ const path = require('path');
 
 console.log(app.getAppPath());
 
-const extPath = path.join(app.getAppPath(), 'build');
+// Determine the extension path based on environment
+const isDev = !app.isPackaged;
+let extPath;
+
+if (isDev) {
+  // In development, use the local build directory
+  extPath = path.join(__dirname, 'build');
+} else {
+  // In production, use the packaged resources directory
+  extPath = path.join(process.resourcesPath, 'build');
+}
+
+console.log('Loading extension from:', extPath);
 
 const createWindow = async () => {
   const win = new BrowserWindow({
@@ -24,12 +36,12 @@ const createWindow = async () => {
   console.log('Current Date:', today);
   console.log('Expiry Date:', expiryDate);
 
-  let isExpired = today > expiryDate
+  let isExpired = today > expiryDate;
 
   if (isExpired) {
     console.log('Time expired, loading index.html');
     await win.loadFile('index.html');
-    return
+    return;
   } else {
     await win.loadURL('https://google.com');
     console.log('Time not expired, loading Google');

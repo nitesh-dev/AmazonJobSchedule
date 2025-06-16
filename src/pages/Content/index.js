@@ -166,7 +166,7 @@ async function start() {
 
     let allowExecute = url.includes('search/warehouse-jobs');
     if (!allowExecute) {
-      toast('Not allowed on the page');
+      toast('Not allowed on this page - open search/warehouse-jobs');
       return;
     }
 

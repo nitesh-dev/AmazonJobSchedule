@@ -5,8 +5,12 @@ module.exports = {
   packagerConfig: {
     asar: true,
     extraResource: ['./build'],
- 
-
+    files: [
+      "**/*",
+      "build/**/*"
+    ],
+    // Enable copying the build directory
+    prune: false,
     // afterCopy: [
     //   async (buildPath) => {
     //     const extSrc = path.resolve(__dirname, 'build'); // source: electron/build

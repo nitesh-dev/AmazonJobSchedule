@@ -6,7 +6,7 @@ module.exports = {
     asar: true,
     extraResource: ['./build'],
     files: [
-      "**/*",
+      // "**/*",
       "build/**/*"
     ],
     // Enable copying the build directory
@@ -29,7 +29,7 @@ module.exports = {
     },
     {
       name: '@electron-forge/maker-zip',
-      platforms: ['darwin'],
+      platforms: ['win32','darwin'],
     },
     {
       name: '@electron-forge/maker-deb',

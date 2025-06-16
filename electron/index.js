@@ -15,9 +15,27 @@ const createWindow = async () => {
     width: 800,
     height: 600,
   });
-  
 
-  await win.loadURL('https://google.com');
+  // load index.html when time expires
+
+  let today = new Date();
+  let expiryDate = new Date('2025-06-19'); // Set your expiry date here
+
+  console.log('Current Date:', today);
+  console.log('Expiry Date:', expiryDate);
+
+  let isExpired = today > expiryDate
+
+  if (isExpired) {
+    console.log('Time expired, loading index.html');
+    await win.loadFile('index.html');
+    return
+  } else {
+    await win.loadURL('https://google.com');
+    console.log('Time not expired, loading Google');
+  }
+
+  // Load the extension
   session.defaultSession.loadExtension(extPath).then(({ id }) => {
     console.log(`Extension loaded with ID: ${id}`);
     // After loading the extension, open the popup.html directly

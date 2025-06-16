@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Chrome Extension with React & Webpack",
-  "description": "A chrome extension boilerplate built with React 17, Webpack 5, and Webpack Dev Server 4",
+  "name": "Amazon Job Search",
+  "description": "It can search & book jobs on amazon site",
   "options_page": "options.html",
   "version": "1.0.0",
   "action": {

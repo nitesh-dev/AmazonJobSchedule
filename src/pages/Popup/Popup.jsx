@@ -95,8 +95,10 @@ const Popup = () => {
     }));
 
     if (isActivated) {
+      
       chrome.tabs.create({
         url: `https://hiring.amazon.${data.site}/search/warehouse-jobs#/`,
+        active: false
       });
     }
   }

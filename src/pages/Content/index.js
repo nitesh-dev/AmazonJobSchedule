@@ -163,6 +163,13 @@ async function start() {
 
       return;
     }
+
+    let allowExecute = url.includes('search/warehouse-jobs');
+    if (!allowExecute) {
+      toast('Not allowed on the page');
+      return;
+    }
+
     startPolling(storage);
   } catch (error) {
     console.error('Error in start function:', error);
@@ -186,6 +193,8 @@ function startPolling(storage) {
 
       toast('Fetching jobs...');
       let jobs = await getJobs(getToken(), country, locale, site);
+
+      let allJobsCount = jobs.length;
 
       // Filter jobs
       jobs = jobs.filter((item) => {
@@ -214,6 +223,11 @@ function startPolling(storage) {
       });
 
       console.log(`Filtered jobs count: ${jobs.length}`);
+      if (allJobsCount) {
+        toast(`All jobs: ${allJobsCount} | Matched Jobs: ${jobs.length}`, {
+          backgroundColor: ' #14746f'
+        });
+      }
 
       if (!jobs.length) return;
 
@@ -228,6 +242,10 @@ function startPolling(storage) {
       );
 
       console.log('Shifts:', shifts);
+
+      toast(`Shifts found: ${shifts.length}`, {
+        backgroundColor: ' #1565c0'
+      });
 
       if (!shifts.length) return;
 
@@ -253,9 +271,9 @@ function openApplicationPage(jobId, shiftId) {
   window.location.href = url;
 }
 
-function toast(message) {
+function toast(message, options = {}) {
   console.log('Toast message:', message);
-  createToast(message);
+  createToast(message, options);
 }
 
 // multiple selector proceed when either one is available
@@ -345,7 +363,7 @@ async function getJobs(
           keyWords: '',
           equalFilters: [
             { key: 'shiftType', val: 'All' },
-            { key: 'scheduleRequiredLanguage', val: 'en-US' },
+            { key: 'scheduleRequiredLanguage', val: locale },
           ],
           containFilters: [
             { key: 'isPrivateSchedule', val: ['false'] },

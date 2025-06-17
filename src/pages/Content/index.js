@@ -147,6 +147,7 @@ let stopPolling = false;
 
 function startPolling(storage) {
   let MAX_CONCURRENT = parseInt(storage.apiCallCount) || 1; // Set to 2 if you want more aggressive polling
+  let delayGap = 1000 / MAX_CONCURRENT  // milliseconds
   const interval = setInterval(async () => {
     if (activeRequests >= MAX_CONCURRENT || stopPolling) return;
 
@@ -259,7 +260,7 @@ function startPolling(storage) {
     } finally {
       activeRequests--;
     }
-  }, 200); // Try every 200ms
+  }, delayGap); // Try every 200ms
 }
 
 start();

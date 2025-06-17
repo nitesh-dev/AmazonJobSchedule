@@ -110,9 +110,8 @@ function loadStorage() {
 }
 
 async function reloadPage(site) {
-  await sleep(5000);
+  await sleep(1000);
   // reload the page
-  console.log('No jobs found, reloading the page...');
 
   // reload if site is same
   if (document.location.href.includes('search/warehouse-jobs')) {
@@ -134,46 +133,13 @@ async function start() {
     return;
   }
 
-  try {
-    // apply for application
-    if (url.includes('application/?page')) {
-      console.log('Applying for application...');
-
-      // wait for selctor to be available
-      await waitForSelector(['.e4s17lp0.css-1ipr55l']);
-      clickElement('.e4s17lp0.css-1ipr55l');
-      return;
-    } else if (
-      (url.includes('application/us/?CS') && url.includes('/consent')) ||
-      (url.includes('application/us/?CS') && url.includes('/pre-consent')) ||
-      (url.includes('application/us/?CS') &&
-        url.includes('/no-available-shift'))
-    ) {
-      // e4s17lp0 css-1ipr55l no-available-shift
-      // candidateId - local storage: bbCandidateId
-      let interval = setInterval(async () => {
-        if (document.URL.includes('general-questions')) {
-          clearInterval(interval);
-          return;
-        }
-        await waitForSelector(['.e4s17lp0.css-1ipr55l'], 200);
-        clickElement('.e4s17lp0.css-1ipr55l');
-        console.log('Clicked on the create button');
-      }, 500);
-
-      return;
-    }
-
-    let allowExecute = url.includes('search/warehouse-jobs');
-    if (!allowExecute) {
-      toast('Not allowed on this page - open search/warehouse-jobs');
-      return;
-    }
-
-    startPolling(storage);
-  } catch (error) {
-    console.error('Error in start function:', error);
+  let allowExecute = url.includes('search/warehouse-jobs');
+  if (!allowExecute) {
+    toast('Not allowed on this page - open search/warehouse-jobs');
+    return;
   }
+
+  startPolling(storage);
 }
 
 let activeRequests = 0;
@@ -255,7 +221,39 @@ function startPolling(storage) {
       stopPolling = true;
       clearInterval(interval);
 
-      openApplicationPage(randomJob.jobId, randomShift.shiftId);
+      // call create application api
+      toast('Apply for application');
+      let res = await createApplication(randomJob.jobId, randomShift.shiftId);
+
+      if (!res) {
+        toast('Failed to book application', { backgroundColor: ' #ff0000' });
+        reloadPage();
+        return;
+      }
+
+      // call update application api
+      toast('Update application');
+      let res2 = await updateApplication(
+        res.applicationId,
+        randomJob.jobId,
+        randomShift.shiftId
+      );
+
+      if (!res2) {
+        toast('Failed to update application', { backgroundColor: ' #ff0000' });
+        // reloadPage();
+        return;
+      }
+
+      openApplicationPage(
+        site,
+        locale,
+        randomJob.jobId,
+        randomShift.shiftId,
+        res.applicationId
+      );
+
+      // navigate to that page
     } catch (err) {
       console.error('Error in job poller:', err);
     } finally {
@@ -266,8 +264,8 @@ function startPolling(storage) {
 
 start();
 
-function openApplicationPage(jobId, shiftId) {
-  let url = `https://hiring.amazon.com/application/?page=pre-consent&jobId=${jobId}&scheduleId=${shiftId}&CS=true&locale=en-US&token=&ssoEnabled=1`;
+function openApplicationPage(site, locale, jobId, shiftId, applicationId) {
+  let url = `https://hiring.amazon.${site}/application/us/?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1#/general-questions?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1&applicationId=${applicationId}`;
   window.location.href = url;
 }
 
@@ -567,15 +565,14 @@ async function createApplication(jobId, scheduleId) {
       const data = await response.json();
       console.log(data);
 
-      let res = data.data
-      return {applicationId: res.applicationId}
-
+      let res = data.data;
+      return { applicationId: res.applicationId };
     } else {
       throw new Error('Failed to fetch data');
     }
   } catch (error) {
     console.error('Error in createApplication function:', error);
-    return null
+    return null;
   }
 }
 
@@ -583,6 +580,7 @@ async function updateApplication(applicationId, jobId, scheduleId) {
   try {
     const myHeaders = new Headers();
     myHeaders.append('accept', 'application/json, text/plain, */*');
+    myHeaders.append('content-type', 'application/json;charset=UTF-8');
     myHeaders.append('authorization', localStorage.getItem('accessToken'));
 
     myHeaders.append(
@@ -590,41 +588,40 @@ async function updateApplication(applicationId, jobId, scheduleId) {
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
     );
 
-    const raw = {
-      applicationId,
+    const raw = JSON.stringify({
+      applicationId: applicationId,
       payload: {
         jobId,
         scheduleId,
       },
       type: 'job-confirm',
       dspEnabled: true,
-    };
+    });
 
     const requestOptions = {
       method: 'PUT',
       headers: myHeaders,
-      body: JSON.stringify(raw),
+      body: raw,
       redirect: 'follow',
     };
 
     let response = await fetch(
       'https://hiring.amazon.com/application/api/candidate-application/update-application',
       requestOptions
-    )
+    );
 
     if (response.ok) {
       const data = await response.json();
       console.log(data);
 
-      let res = data.data
-      return res
-
+      let res = data.data;
+      return res;
     } else {
       throw new Error('Failed to fetch data');
     }
   } catch (error) {
     console.log(error);
-    return null
+    return null;
   }
 }
 

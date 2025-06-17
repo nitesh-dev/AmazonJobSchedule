@@ -225,7 +225,7 @@ function startPolling(storage) {
       console.log(`Filtered jobs count: ${jobs.length}`);
       if (allJobsCount) {
         toast(`All jobs: ${allJobsCount} | Matched Jobs: ${jobs.length}`, {
-          backgroundColor: ' #14746f'
+          backgroundColor: ' #14746f',
         });
       }
 
@@ -244,7 +244,7 @@ function startPolling(storage) {
       console.log('Shifts:', shifts);
 
       toast(`Shifts found: ${shifts.length}`, {
-        backgroundColor: ' #1565c0'
+        backgroundColor: ' #1565c0',
       });
 
       if (!shifts.length) return;
@@ -531,7 +531,7 @@ async function getShift(
   }
 }
 
-async function createApplication(site, jobId, scheduleId) {
+async function createApplication(jobId, scheduleId) {
   // authorization token - accessToken
 
   try {
@@ -558,15 +558,73 @@ async function createApplication(site, jobId, scheduleId) {
       redirect: 'follow',
     };
 
-    fetch(
-      `https://hiring.amazon.${site}/application/api/candidate-application/ds/create-application/`,
+    let response = await fetch(
+      `https://hiring.amazon.com/application/api/candidate-application/ds/create-application/`,
       requestOptions
-    )
-      .then((response) => response.text())
-      .then((result) => console.log(result))
-      .catch((error) => console.error(error));
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log(data);
+
+      let res = data.data
+      return {applicationId: res.applicationId}
+
+    } else {
+      throw new Error('Failed to fetch data');
+    }
   } catch (error) {
     console.error('Error in createApplication function:', error);
+    return null
+  }
+}
+
+async function updateApplication(applicationId, jobId, scheduleId) {
+  try {
+    const myHeaders = new Headers();
+    myHeaders.append('accept', 'application/json, text/plain, */*');
+    myHeaders.append('authorization', localStorage.getItem('accessToken'));
+
+    myHeaders.append(
+      'user-agent',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+    );
+
+    const raw = {
+      applicationId,
+      payload: {
+        jobId,
+        scheduleId,
+      },
+      type: 'job-confirm',
+      dspEnabled: true,
+    };
+
+    const requestOptions = {
+      method: 'PUT',
+      headers: myHeaders,
+      body: JSON.stringify(raw),
+      redirect: 'follow',
+    };
+
+    let response = await fetch(
+      'https://hiring.amazon.com/application/api/candidate-application/update-application',
+      requestOptions
+    )
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log(data);
+
+      let res = data.data
+      return res
+
+    } else {
+      throw new Error('Failed to fetch data');
+    }
+  } catch (error) {
+    console.log(error);
+    return null
   }
 }
 

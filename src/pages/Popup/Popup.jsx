@@ -24,7 +24,7 @@ const Popup = () => {
     locations: [],
     site: 'com', // com, ca
     activated: false,
-    apiCallCount: "1"
+    apiCallCount: '1',
   });
 
   const [locations, setLocations] = useState([]);
@@ -83,6 +83,17 @@ const Popup = () => {
     }));
   }
 
+  function onReset() {
+    setData((prevData) => ({
+      jobType: 'any',
+      duration: 'any',
+      locations: [],
+      site: prevData.site,
+      activated: false,
+      apiCallCount: '1',
+    }));
+  }
+
   function onToggleActivate() {
     let isActivated = !data.activated;
     chrome.runtime.sendMessage({
@@ -95,10 +106,9 @@ const Popup = () => {
     }));
 
     if (isActivated) {
-      
       chrome.tabs.create({
         url: `https://hiring.amazon.${data.site}/search/warehouse-jobs#/`,
-        active: false
+        active: false,
       });
     }
   }
@@ -107,7 +117,7 @@ const Popup = () => {
     loadStorage();
     console.log(localStorage.getItem('locations'));
     chrome.storage.local.get(['locations'], (result) => {
-      if(result.locations) {
+      if (result.locations) {
         setLocations(result.locations);
       }
     });
@@ -151,6 +161,11 @@ const Popup = () => {
                 <Option value="3">3</Option>
                 <Option value="4">4</Option>
                 <Option value="5">5</Option>
+                <Option value="6">6</Option>
+                <Option value="7">7</Option>
+                <Option value="8">8</Option>
+                <Option value="9">9</Option>
+                <Option value="10">10</Option>
               </Select>
             </div>
             <div>
@@ -248,7 +263,14 @@ const Popup = () => {
                     </Chip>
                   )}
                 </Box>
-                <Autocomplete options={locations} placeholder='Pick location' size='sm' onChange={onChangeLocations} freeSolo={true} clearOnBlur={true}/>
+                <Autocomplete
+                  options={locations}
+                  placeholder="Pick location"
+                  size="sm"
+                  onChange={onChangeLocations}
+                  freeSolo={true}
+                  clearOnBlur={true}
+                />
                 {/* <Select
                   placeholder="Pick location"
                   size="sm"
@@ -260,7 +282,12 @@ const Popup = () => {
             </div>
             <Divider></Divider>
             <Stack direction="row" spacing={1} justifyContent="space-between">
-              <Button size="sm" fullWidth="true" variant="outlined">
+              <Button
+                size="sm"
+                fullWidth="true"
+                variant="outlined"
+                onClick={onReset}
+              >
                 Reset
               </Button>
               <Button

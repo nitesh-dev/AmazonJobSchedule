@@ -122,10 +122,12 @@ async function reloadPage(site) {
   window.location.href = `https://hiring.amazon.${site}/search/warehouse-jobs#/`;
 }
 
+let storage = {};
+
 async function start() {
   let url = document.URL;
 
-  let storage = await loadStorage();
+  storage = await loadStorage();
   console.log({ storage });
 
   if (!storage.activated) {
@@ -139,17 +141,18 @@ async function start() {
     return;
   }
 
-  startPolling(storage);
+  startPolling();
 }
 
 let activeRequests = 0;
 let stopPolling = false;
 
-function startPolling(storage) {
+function startPolling() {
   let MAX_CONCURRENT = parseInt(storage.apiCallCount) || 1; // Set to 2 if you want more aggressive polling
-  let delayGap = 1000 / MAX_CONCURRENT  // milliseconds
+  let delayGap = 1000 / MAX_CONCURRENT; // milliseconds
+  let isBooking = false
   const interval = setInterval(async () => {
-    if (activeRequests >= MAX_CONCURRENT || stopPolling) return;
+    if (activeRequests >= MAX_CONCURRENT || stopPolling || isBooking) return;
 
     activeRequests++;
 
@@ -158,8 +161,10 @@ function startPolling(storage) {
       const locale = storage.site === 'com' ? 'en-US' : 'en-CA';
       const site = storage.site;
 
-      toast('Fetching jobs...');
+      if (!storage.lessLog) toast('Fetching jobs...');
       let jobs = await getJobs(getToken(), country, locale, site);
+
+      if(isBooking) return
 
       let allJobsCount = jobs.length;
 
@@ -189,14 +194,16 @@ function startPolling(storage) {
         return true;
       });
 
-      console.log(`Filtered jobs count: ${jobs.length}`);
-      if (allJobsCount) {
+      console.log(`Filtered jobs count: ${jobs.length} | all job count: ${allJobsCount}`);
+      if (allJobsCount || !isBooking) {
         toast(`All jobs: ${allJobsCount} | Matched Jobs: ${jobs.length}`, {
           backgroundColor: ' #14746f',
         });
       }
 
       if (!jobs.length) return;
+
+      isBooking = true
 
       const randomJob = jobs[Math.floor(Math.random() * jobs.length)];
 
@@ -228,7 +235,11 @@ function startPolling(storage) {
 
       if (!res) {
         toast('Failed to book application', { backgroundColor: ' #ff0000' });
-        reloadPage();
+        if (storage.reloadPageOnError) {
+          reloadPage();
+        } else {
+          alert('Stopped do to error, try reloading');
+        }
         return;
       }
 
@@ -242,7 +253,6 @@ function startPolling(storage) {
 
       if (!res2) {
         toast('Failed to update application', { backgroundColor: ' #ff0000' });
-        // reloadPage();
         return;
       }
 
@@ -273,62 +283,6 @@ function openApplicationPage(site, locale, jobId, shiftId, applicationId) {
 function toast(message, options = {}) {
   console.log('Toast message:', message);
   createToast(message, options);
-}
-
-// multiple selector proceed when either one is available
-function waitForSelector(selectors, timeout = 10000) {
-  if (typeof selectors === 'string') selectors = [selectors];
-  return new Promise((resolve, reject) => {
-    const interval = 100;
-    let elapsed = 0;
-    const timer = setInterval(() => {
-      for (const selector of selectors) {
-        const el = document.querySelector(selector);
-        if (el) {
-          clearInterval(timer);
-          resolve(el);
-          return;
-        }
-      }
-      if ((elapsed += interval) >= timeout) {
-        clearInterval(timer);
-        reject(
-          new Error(`Timeout waiting for selectors: ${selectors.join(', ')}`)
-        );
-      }
-    }, interval);
-  });
-}
-
-function clickElement(selector) {
-  const element = document.querySelector(selector);
-  if (element) {
-    fakeUserInteraction(element);
-    const event = new MouseEvent('click', {
-      view: window,
-      bubbles: true,
-      cancelable: true,
-    });
-    element.dispatchEvent(event);
-    console.log('✅ Clicked:', selector);
-  } else {
-    console.warn('❌ Element not found:', selector);
-  }
-}
-
-function fakeUserInteraction(target) {
-  const mouseMove = new MouseEvent('mousemove', {
-    bubbles: true,
-    cancelable: true,
-    view: window,
-  });
-  const mouseDown = new MouseEvent('mousedown', {
-    bubbles: true,
-    cancelable: true,
-    view: window,
-  });
-  target.dispatchEvent(mouseMove);
-  target.dispatchEvent(mouseDown);
 }
 
 function sleep(ms) {

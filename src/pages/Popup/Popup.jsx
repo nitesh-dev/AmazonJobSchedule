@@ -3,6 +3,7 @@ import {
   Box,
   Button,
   Card,
+  Checkbox,
   Chip,
   ChipDelete,
   Divider,
@@ -11,21 +12,27 @@ import {
   Option,
   Select,
   Stack,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/joy';
 
 import React, { useEffect, useState } from 'react';
+// import OptionMenu from './OptionMenu';
 // import { loadStorage } from './utils';
 
+const defaultData = {
+  jobType: 'any',
+  duration: 'any',
+  locations: [],
+  site: 'com', // com, ca
+  activated: false,
+  apiCallCount: '1',
+  lessLog: false,
+  reloadPageOnError: false,
+};
+
 const Popup = () => {
-  const [data, setData] = useState({
-    jobType: 'any',
-    duration: 'any',
-    locations: [],
-    site: 'com', // com, ca
-    activated: false,
-    apiCallCount: '1',
-  });
+  const [data, setData] = useState(defaultData);
 
   const [locations, setLocations] = useState([]);
 
@@ -85,12 +92,8 @@ const Popup = () => {
 
   function onReset() {
     setData((prevData) => ({
-      jobType: 'any',
-      duration: 'any',
-      locations: [],
+      ...defaultData,
       site: prevData.site,
-      activated: false,
-      apiCallCount: '1',
     }));
   }
 
@@ -134,6 +137,20 @@ const Popup = () => {
   useEffect(() => {
     chrome.storage.local.set({ settings: data });
   }, [data]);
+
+  function onToggleLessLog(event, newValue) {
+    setData((prevData) => ({
+      ...prevData,
+      lessLog: event.target.checked,
+    }));
+  }
+
+  function onToggleReloadPageOnError(event, newValue) {
+    setData((prevData) => ({
+      ...prevData,
+      reloadPageOnError: event.target.checked,
+    }));
+  }
 
   return (
     <div className="App" style={{ padding: '12px' }}>
@@ -280,6 +297,32 @@ const Popup = () => {
                 </Select> */}
               </Card>
             </div>
+            <Divider></Divider>
+            {/* <OptionMenu/> */}
+            {/* <ToggleButtonGroup
+              variant={data.option}
+              value={data.option}
+              onChange={onToggleOption}
+            >
+              <Button value="less-log">Less Log</Button>
+              <Button value="full-log">Full Log</Button>
+            </ToggleButtonGroup> */}
+            <Stack direction="row" spacing={1} w>
+              <Checkbox
+                size="sm"
+                label="Less Logs"
+                variant="outlined"
+                checked={data.lessLog}
+                onChange={onToggleLessLog}
+              />
+              <Checkbox
+                size="sm"
+                label="RPOE"
+                variant="outlined"
+                checked={data.reloadPageOnError}
+                onChange={onToggleReloadPageOnError}
+              />
+            </Stack>
             <Divider></Divider>
             <Stack direction="row" spacing={1} justifyContent="space-between">
               <Button

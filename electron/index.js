@@ -54,7 +54,10 @@ const createWindow = async () => {
     const extensionId = id; // Replace with actual ID from console log
     const popupUrl = `chrome-extension://${extensionId}/popup.html`;
     const popupWin = new BrowserWindow({ width: 300, height: 600 });
-    popupWin.loadURL(popupUrl);
+    popupWin.loadURL(popupUrl)
+    win.on('close', () => {
+      popupWin.close()
+    })
   });
 };
 
@@ -69,6 +72,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  console.log("hello")
   if (process.platform !== 'darwin') {
     app.quit();
   }

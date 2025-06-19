@@ -141,18 +141,18 @@ async function start() {
     return;
   }
 
+  toast('Extension is running');
   startPolling();
 }
 
 let activeRequests = 0;
-let stopPolling = false;
 
 function startPolling() {
   let MAX_CONCURRENT = parseInt(storage.apiCallCount) || 1; // Set to 2 if you want more aggressive polling
   let delayGap = 1000 / MAX_CONCURRENT; // milliseconds
-  let isBooking = false
+  let isBooking = false;
   const interval = setInterval(async () => {
-    if (activeRequests >= MAX_CONCURRENT || stopPolling || isBooking) return;
+    if (activeRequests >= MAX_CONCURRENT || isBooking) return;
 
     activeRequests++;
 
@@ -164,7 +164,7 @@ function startPolling() {
       if (!storage.lessLog) toast('Fetching jobs...');
       let jobs = await getJobs(getToken(), country, locale, site);
 
-      if(isBooking) return
+      if (isBooking) return;
 
       let allJobsCount = jobs.length;
 
@@ -194,8 +194,10 @@ function startPolling() {
         return true;
       });
 
-      console.log(`Filtered jobs count: ${jobs.length} | all job count: ${allJobsCount}`);
-      if (allJobsCount || !isBooking) {
+      console.log(
+        `Filtered jobs count: ${jobs.length} | all job count: ${allJobsCount}`
+      );
+      if (allJobsCount && !isBooking) {
         toast(`All jobs: ${allJobsCount} | Matched Jobs: ${jobs.length}`, {
           backgroundColor: ' #14746f',
         });
@@ -203,7 +205,7 @@ function startPolling() {
 
       if (!jobs.length) return;
 
-      isBooking = true
+      isBooking = true;
 
       const randomJob = jobs[Math.floor(Math.random() * jobs.length)];
 
@@ -225,10 +227,6 @@ function startPolling() {
 
       const randomShift = shifts[Math.floor(Math.random() * shifts.length)];
 
-      // 🎯 Found a match, stop future polling
-      stopPolling = true;
-      clearInterval(interval);
-
       // call create application api
       toast('Apply for application');
       let res = await createApplication(randomJob.jobId, randomShift.shiftId);
@@ -236,7 +234,8 @@ function startPolling() {
       if (!res) {
         toast('Failed to book application', { backgroundColor: ' #ff0000' });
         if (storage.reloadPageOnError) {
-          reloadPage();
+          isBooking = false;
+          return;
         } else {
           alert('Stopped do to error, try reloading');
         }
@@ -255,6 +254,9 @@ function startPolling() {
         toast('Failed to update application', { backgroundColor: ' #ff0000' });
         return;
       }
+
+      // 🎯 Found a match, stop future polling
+      clearInterval(interval);
 
       openApplicationPage(
         site,

@@ -229,7 +229,11 @@ function startPolling() {
 
       // call create application api
       toast('Apply for application');
-      let res = await createApplication(randomJob.jobId, randomShift.shiftId);
+      let res = await createApplication(
+        randomJob.jobId,
+        randomShift.shiftId,
+        site
+      );
 
       if (!res) {
         toast('Failed to book application', { backgroundColor: ' #ff0000' });
@@ -247,7 +251,8 @@ function startPolling() {
       let res2 = await updateApplication(
         res.applicationId,
         randomJob.jobId,
-        randomShift.shiftId
+        randomShift.shiftId,
+        site
       );
 
       if (!res2) {
@@ -486,7 +491,7 @@ async function getShift(
   }
 }
 
-async function createApplication(jobId, scheduleId) {
+async function createApplication(jobId, scheduleId, site) {
   // authorization token - accessToken
 
   try {
@@ -514,7 +519,7 @@ async function createApplication(jobId, scheduleId) {
     };
 
     let response = await fetch(
-      `https://hiring.amazon.com/application/api/candidate-application/ds/create-application/`,
+      `https://hiring.amazon.${site}/application/api/candidate-application/ds/create-application/`,
       requestOptions
     );
 
@@ -533,7 +538,7 @@ async function createApplication(jobId, scheduleId) {
   }
 }
 
-async function updateApplication(applicationId, jobId, scheduleId) {
+async function updateApplication(applicationId, jobId, scheduleId, site) {
   try {
     const myHeaders = new Headers();
     myHeaders.append('accept', 'application/json, text/plain, */*');
@@ -563,7 +568,7 @@ async function updateApplication(applicationId, jobId, scheduleId) {
     };
 
     let response = await fetch(
-      'https://hiring.amazon.com/application/api/candidate-application/update-application',
+      `https://hiring.amazon.${site}/application/api/candidate-application/update-application`,
       requestOptions
     );
 

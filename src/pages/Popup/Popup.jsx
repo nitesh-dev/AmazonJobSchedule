@@ -29,6 +29,7 @@ const defaultData = {
   apiCallCount: '1',
   lessLog: false,
   reloadPageOnError: false,
+  bulkCA: true, // bulk create application
 };
 
 const Popup = () => {
@@ -152,6 +153,13 @@ const Popup = () => {
     }));
   }
 
+  function onToggleBulkCA(event, newValue) {
+    setData((prevData) => ({
+      ...prevData,
+      bulkCA: event.target.checked,
+    }));
+  }
+
   return (
     <div className="App" style={{ padding: '12px' }}>
       <Typography level="h4" sx={{ mb: 2 }}>
@@ -182,6 +190,19 @@ const Popup = () => {
                 <Option value="12">12</Option>
                 <Option value="14">14</Option>
                 <Option value="16">16</Option>
+                <Option value="18">18</Option>
+                <Option value="20">20</Option>
+                <Option value="22">22</Option>
+                <Option value="24">24</Option>
+                <Option value="26">26</Option>
+                <Option value="28">28</Option>
+                <Option value="30">30</Option>
+                <Option value="35">35</Option>
+                <Option value="40">40</Option>
+                <Option value="45">45</Option>
+                <Option value="50">50</Option>
+                <Option value="75">75</Option>
+                <Option value="100">100</Option>
               </Select>
             </div>
             <div>
@@ -316,10 +337,10 @@ const Popup = () => {
               />
               <Checkbox
                 size="sm"
-                label="RPOE"
+                label="Bulk CA"
                 variant="outlined"
-                checked={data.reloadPageOnError}
-                onChange={onToggleReloadPageOnError}
+                checked={data.bulkCA}
+                onChange={onToggleBulkCA}
               />
             </Stack>
             <Divider></Divider>

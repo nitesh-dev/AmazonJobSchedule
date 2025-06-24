@@ -8,9 +8,9 @@
     "start:clean": "electron-forge start",
     "package": "npm run build:extension && electron-forge package",
     "make": "electron-forge make",
-    "make:mac": "npx electron-forge make --platform=darwin",
-    "make:win": "npx electron-forge make --platform=win32",
-    "make:all": "npx electron-forge make --win --mac"
+    "make:mac": "npm run build:extension && npx electron-forge make --platform=darwin",
+    "make:win": "npm run build:extension && npx electron-forge make --platform=win32",
+    "make:all": "npm run build:extension && npx electron-forge make --win --mac"
   },
   "author": "",
   "license": "ISC",

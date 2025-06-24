@@ -124,6 +124,16 @@ async function reloadPage(site) {
 
 let storage = {};
 
+let country = 'United States';
+let locale = 'en-US';
+let site = 'com';
+
+function updateStorage() {
+  country = storage.site === 'com' ? 'United States' : 'Canada';
+  locale = storage.site === 'com' ? 'en-US' : 'en-CA';
+  site = storage.site;
+}
+
 async function start() {
   let url = document.URL;
 
@@ -141,30 +151,32 @@ async function start() {
     return;
   }
 
+  updateStorage();
+
   toast('Extension is running');
   startPolling();
 }
 
 let activeRequests = 0;
+let isBookingDone = false;
 
 function startPolling() {
   let MAX_CONCURRENT = parseInt(storage.apiCallCount) || 1; // Set to 2 if you want more aggressive polling
   let delayGap = 1000 / MAX_CONCURRENT; // milliseconds
-  let isBooking = false;
   const interval = setInterval(async () => {
-    if (activeRequests >= MAX_CONCURRENT || isBooking) return;
+    if (isBookingDone) {
+      // 🎯 Found a match, stop future polling
+      clearInterval(interval);
+      toast('Processing stopped');
+      return;
+    }
+    if (activeRequests >= MAX_CONCURRENT) return;
 
     activeRequests++;
 
     try {
-      const country = storage.site === 'com' ? 'United States' : 'Canada';
-      const locale = storage.site === 'com' ? 'en-US' : 'en-CA';
-      const site = storage.site;
-
       if (!storage.lessLog) toast('Fetching jobs...');
-      let jobs = await getJobs(getToken(), country, locale, site);
-
-      if (isBooking) return;
+      let jobs = await getJobs(getToken());
 
       let allJobsCount = jobs.length;
 
@@ -194,84 +206,13 @@ function startPolling() {
         return true;
       });
 
-      console.log(
-        `Filtered jobs count: ${jobs.length} | all job count: ${allJobsCount}`
-      );
-      if (allJobsCount && !isBooking) {
+      if (allJobsCount) {
         toast(`All jobs: ${allJobsCount} | Matched Jobs: ${jobs.length}`, {
           backgroundColor: ' #14746f',
         });
       }
 
-      if (!jobs.length) return;
-
-      isBooking = true;
-
-      const randomJob = jobs[Math.floor(Math.random() * jobs.length)];
-
-      const shifts = await getShift(
-        randomJob.jobId,
-        getToken(),
-        country,
-        locale,
-        site
-      );
-
-      console.log('Shifts:', shifts);
-
-      toast(`Shifts found: ${shifts.length}`, {
-        backgroundColor: ' #1565c0',
-      });
-
-      if (!shifts.length) return;
-
-      const randomShift = shifts[Math.floor(Math.random() * shifts.length)];
-
-      // call create application api
-      toast('Apply for application');
-      let res = await createApplication(
-        randomJob.jobId,
-        randomShift.shiftId,
-        site
-      );
-
-      if (!res) {
-        toast('Failed to book application', { backgroundColor: ' #ff0000' });
-        if (storage.reloadPageOnError) {
-          isBooking = false;
-          return;
-        } else {
-          alert('Stopped do to error, try reloading');
-        }
-        return;
-      }
-
-      // call update application api
-      toast('Update application');
-      let res2 = await updateApplication(
-        res.applicationId,
-        randomJob.jobId,
-        randomShift.shiftId,
-        site
-      );
-
-      if (!res2) {
-        toast('Failed to update application', { backgroundColor: ' #ff0000' });
-        return;
-      }
-
-      // 🎯 Found a match, stop future polling
-      clearInterval(interval);
-
-      openApplicationPage(
-        site,
-        locale,
-        randomJob.jobId,
-        randomShift.shiftId,
-        res.applicationId
-      );
-
-      // navigate to that page
+      handleJobs(jobs);
     } catch (err) {
       console.error('Error in job poller:', err);
     } finally {
@@ -282,13 +223,150 @@ function startPolling() {
 
 start();
 
-function openApplicationPage(site, locale, jobId, shiftId, applicationId) {
+/*  store shifts data
+    {
+      id: job-id + shift-id,
+      jobId: string,
+      shiftId: string,
+      date: num
+    }
+ */
+let allShifts = new Map();
+
+function autoRemoveShift(thresholdMs = 10 * 1000) {
+  // default: 10 minutes
+  const now = Date.now();
+  for (let [id, shift] of allShifts.entries()) {
+    if (now - (shift.createdAt || 0) > thresholdMs) {
+      allShifts.delete(id);
+      console.log(`Auto-removed shift ${id} (older than ${thresholdMs} ms)`);
+    }
+  }
+}
+
+setInterval(() => autoRemoveShift(), 2 * 1000);
+
+function hasJobExist(jobId) {
+  for (let shift of allShifts.values()) {
+    if (shift.jobId === jobId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function handleJobs(jobs) {
+  // fetch all shift and add it to shifts
+  jobs.forEach(async (job) => {
+    // skip if old jobs are fetched
+    let isExist = hasJobExist(job.jobId);
+    if (isExist) return;
+    const shifts = await getShift(job.jobId, getToken());
+
+    toast(`Shift found: ${shifts.length}`, {
+      backgroundColor: ' #1565c0',
+    });
+    console.log({ shifts });
+
+    // add shift to array
+    shifts.forEach((shift) => {
+      let id = `${job.jobId} | ${shift.shiftId}`;
+
+      allShifts.set(id, {
+        id: id,
+        jobId: job.jobId,
+        shiftId: shift.shiftId,
+        createdAt: Date.now(),
+      });
+
+      if (storage.bulkCA) {
+        handleCreateUpdateApplication(id);
+      } else {
+        triggerCreateApplicationProcess();
+      }
+    });
+  });
+}
+
+let isCreateApplicationProcessRunning = false;
+let oldApplicationKey = undefined;
+
+function getNextKey(map, currentKey) {
+  let found = false;
+  for (let key of map.keys()) {
+    if (found) return key;
+    if (key === currentKey) found = true;
+  }
+  return undefined; // No next key found
+}
+
+// used for non-bulk options
+async function triggerCreateApplicationProcess() {
+  if (isCreateApplicationProcessRunning) {
+    console.log('trigger already running');
+    return;
+  }
+
+  isCreateApplicationProcessRunning = true;
+
+  // get first key
+  let id = allShifts.keys().next().value;
+  while (id) {
+    await handleCreateUpdateApplication(id);
+    id = getNextKey(allShifts, oldApplicationKey);
+  }
+
+  toast('Trigger closed');
+  isCreateApplicationProcessRunning = false;
+}
+
+async function handleCreateUpdateApplication(id) {
+  // toast('Update create application');
+  // return;
+
+  try {
+    if (isBookingDone) return;
+
+    // get shift data
+    let shift = allShifts.get(id);
+
+    // call create application api
+    toast('Apply for application');
+    let res = await createApplication(shift.jobId, shift.shiftId);
+
+    if (!res) {
+      toast('Failed to book application', { backgroundColor: ' #ff0000' });
+      return;
+    }
+
+    isBookingDone = true;
+
+    // call update application api
+    toast('Update application');
+    let res2 = await updateApplication(
+      res.applicationId,
+      shift.jobId,
+      shift.shiftId
+    );
+
+    if (!res2) {
+      toast('Failed to update application', { backgroundColor: ' #ff0000' });
+      return;
+    }
+
+    openApplicationPage(shift.jobId, shift.shiftId, res.applicationId);
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+function openApplicationPage(jobId, shiftId, applicationId) {
   let url = `https://hiring.amazon.${site}/application/us/?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1#/general-questions?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1&applicationId=${applicationId}`;
   window.location.href = url;
 }
 
 function toast(message, options = {}) {
-  console.log('Toast message:', message);
+  // console.log('Toast message:', message);
   createToast(message, options);
 }
 
@@ -296,12 +374,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function getJobs(
-  token,
-  country = 'United States',
-  locale = 'en-US',
-  site = 'com'
-) {
+async function getJobs(token) {
   try {
     const myHeaders = new Headers();
 
@@ -402,13 +475,7 @@ function saveLocations(locations) {
   chrome.storage.local.set({ locations: locations });
 }
 
-async function getShift(
-  jobId,
-  token,
-  country = 'United States',
-  locale = 'en-US',
-  site = 'com'
-) {
+async function getShift(jobId, token) {
   try {
     const myHeaders = new Headers();
 
@@ -473,7 +540,6 @@ async function getShift(
 
     if (response.ok) {
       const data = await response.json();
-      console.log(data);
 
       let shifts = data.data.searchScheduleCards.scheduleCards.map((shift) => {
         return {
@@ -491,7 +557,7 @@ async function getShift(
   }
 }
 
-async function createApplication(jobId, scheduleId, site) {
+async function createApplication(jobId, scheduleId) {
   // authorization token - accessToken
 
   try {
@@ -538,7 +604,7 @@ async function createApplication(jobId, scheduleId, site) {
   }
 }
 
-async function updateApplication(applicationId, jobId, scheduleId, site) {
+async function updateApplication(applicationId, jobId, scheduleId) {
   try {
     const myHeaders = new Headers();
     myHeaders.append('accept', 'application/json, text/plain, */*');

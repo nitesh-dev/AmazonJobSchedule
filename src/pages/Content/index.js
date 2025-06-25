@@ -310,15 +310,15 @@ async function triggerCreateApplicationProcess() {
 
   // get first key
   let oldApplicationKey = allShifts.keys().next().value;
-  let triggerCount = 0
+  let triggerCount = 0;
   while (oldApplicationKey) {
-    triggerCount++
+    triggerCount++;
     await handleCreateUpdateApplication(oldApplicationKey);
     oldApplicationKey = getNextKey(allShifts, oldApplicationKey);
   }
 
   toast('Trigger closed');
-  console.log("trigger closed", triggerCount, allShifts.size)
+  console.log('trigger closed', triggerCount, allShifts.size);
   isCreateApplicationProcessRunning = false;
 }
 
@@ -355,6 +355,8 @@ async function handleCreateUpdateApplication(id) {
       toast('Failed to update application', { backgroundColor: ' #ff0000' });
       return;
     }
+
+    await updateApplicationStep(res.applicationId)
 
     openApplicationPage(shift.jobId, shift.shiftId, res.applicationId);
   } catch (error) {
@@ -652,6 +654,34 @@ async function updateApplication(applicationId, jobId, scheduleId) {
   } catch (error) {
     console.log(error);
     return null;
+  }
+}
+
+async function updateApplicationStep(applicationId) {
+  try {
+    const myHeaders = new Headers();
+    myHeaders.append('accept', 'application/json, text/plain, */*');
+    myHeaders.append('authorization', localStorage.getItem('accessToken'));
+    myHeaders.append('content-type', 'application/json;charset=UTF-8');
+
+    const raw = {
+      applicationId: applicationId,
+      workflowStepName: 'general-questions',
+    };
+
+    const requestOptions = {
+      method: 'PUT',
+      headers: myHeaders,
+      body: JSON.stringify(raw),
+      redirect: 'follow',
+    };
+
+    await fetch(
+      `https://hiring.amazon.${site}/application/api/candidate-application/update-workflow-step-name`,
+      requestOptions
+    );
+  } catch (error) {
+    console.log(error);
   }
 }
 

@@ -233,7 +233,7 @@ start();
  */
 let allShifts = new Map();
 
-function autoRemoveShift(thresholdMs = 10 * 1000) {
+function autoRemoveShift(thresholdMs = 60 * 1000) {
   // default: 10 minutes
   const now = Date.now();
   for (let [id, shift] of allShifts.entries()) {
@@ -289,7 +289,6 @@ async function handleJobs(jobs) {
 }
 
 let isCreateApplicationProcessRunning = false;
-let oldApplicationKey = undefined;
 
 function getNextKey(map, currentKey) {
   let found = false;
@@ -310,13 +309,16 @@ async function triggerCreateApplicationProcess() {
   isCreateApplicationProcessRunning = true;
 
   // get first key
-  let id = allShifts.keys().next().value;
-  while (id) {
-    await handleCreateUpdateApplication(id);
-    id = getNextKey(allShifts, oldApplicationKey);
+  let oldApplicationKey = allShifts.keys().next().value;
+  let triggerCount = 0
+  while (oldApplicationKey) {
+    triggerCount++
+    await handleCreateUpdateApplication(oldApplicationKey);
+    oldApplicationKey = getNextKey(allShifts, oldApplicationKey);
   }
 
   toast('Trigger closed');
+  console.log("trigger closed", triggerCount, allShifts.size)
   isCreateApplicationProcessRunning = false;
 }
 

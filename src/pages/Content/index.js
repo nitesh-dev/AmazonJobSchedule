@@ -1,3 +1,4 @@
+import { uid } from 'uid';
 /* eslint-disable no-restricted-globals */
 console.log('Content script works!');
 console.log('Must reload extension for modifications to take effect.');
@@ -356,7 +357,7 @@ async function handleCreateUpdateApplication(id) {
       return;
     }
 
-    await updateApplicationStep(res.applicationId)
+    await updateApplicationStep(res.applicationId);
 
     openApplicationPage(shift.jobId, shift.shiftId, res.applicationId);
   } catch (error) {
@@ -376,6 +377,14 @@ function toast(message, options = {}) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function saveLocations(locations) {
+  let oldLocations = JSON.parse(localStorage.getItem('locations')) || [];
+
+  // merge old locations with new locations
+  locations = [...new Set([...oldLocations, ...locations])];
+  chrome.storage.local.set({ locations: locations });
 }
 
 async function getJobs(token) {
@@ -438,45 +447,31 @@ async function getJobs(token) {
       redirect: 'follow',
     };
 
-    let response = await fetch(
+    let data = await fetchData(
       'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql',
-      requestOptions
+      requestOptions,
+      true
     );
 
-    if (response.ok) {
-      const data = await response.json();
-      // console.log(data);
+    let jobs = data.data.searchJobCardsByLocation.jobCards.map((job) => {
+      return {
+        jobId: job.jobId,
+        duration: job.employmentType.toLocaleLowerCase(),
+        type: job.jobTypeL10N.toLocaleLowerCase(),
+        shift: job.scheduleCount,
+        location: job.locationName.toLocaleLowerCase(),
+        name: job.jobTitle,
+      };
+    });
 
-      let jobs = data.data.searchJobCardsByLocation.jobCards.map((job) => {
-        return {
-          jobId: job.jobId,
-          duration: job.employmentType.toLocaleLowerCase(),
-          type: job.jobTypeL10N.toLocaleLowerCase(),
-          shift: job.scheduleCount,
-          location: job.locationName.toLocaleLowerCase(),
-          name: job.jobTitle,
-        };
-      });
-
-      // save locations to local storage
-      let locations = jobs.map((job) => job.location.split(',')[0]);
-      saveLocations(locations);
-      return jobs;
-    } else {
-      throw new Error('Failed to fetch data');
-    }
+    // save locations to local storage
+    let locations = jobs.map((job) => job.location.split(',')[0]);
+    saveLocations(locations);
+    return jobs;
   } catch (error) {
     console.error('Error in getJobs function:', error);
     return [];
   }
-}
-
-function saveLocations(locations) {
-  let oldLocations = JSON.parse(localStorage.getItem('locations')) || [];
-
-  // merge old locations with new locations
-  locations = [...new Set([...oldLocations, ...locations])];
-  chrome.storage.local.set({ locations: locations });
 }
 
 async function getShift(jobId, token) {
@@ -537,24 +532,18 @@ async function getShift(jobId, token) {
       redirect: 'follow',
     };
 
-    let response = await fetch(
+    let data = await fetchData(
       'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql',
       requestOptions
     );
 
-    if (response.ok) {
-      const data = await response.json();
-
-      let shifts = data.data.searchScheduleCards.scheduleCards.map((shift) => {
-        return {
-          shiftId: shift.scheduleId,
-          hours: shift.hoursPerWeek,
-        };
-      });
-      return shifts;
-    } else {
-      throw new Error('Failed to fetch data');
-    }
+    let shifts = data.data.searchScheduleCards.scheduleCards.map((shift) => {
+      return {
+        shiftId: shift.scheduleId,
+        hours: shift.hoursPerWeek,
+      };
+    });
+    return shifts;
   } catch (error) {
     console.error('Error in getShift function:', error);
     return [];
@@ -588,20 +577,15 @@ async function createApplication(jobId, scheduleId) {
       redirect: 'follow',
     };
 
-    let response = await fetch(
+    let data = await fetchData(
       `https://hiring.amazon.${site}/application/api/candidate-application/ds/create-application/`,
       requestOptions
     );
 
-    if (response.ok) {
-      const data = await response.json();
-      console.log(data);
+    console.log(data);
 
-      let res = data.data;
-      return { applicationId: res.applicationId };
-    } else {
-      throw new Error('Failed to fetch data');
-    }
+    let res = data.data;
+    return { applicationId: res.applicationId };
   } catch (error) {
     console.error('Error in createApplication function:', error);
     return null;
@@ -637,20 +621,15 @@ async function updateApplication(applicationId, jobId, scheduleId) {
       redirect: 'follow',
     };
 
-    let response = await fetch(
+    let data = await fetchData(
       `https://hiring.amazon.${site}/application/api/candidate-application/update-application`,
       requestOptions
     );
 
-    if (response.ok) {
-      const data = await response.json();
-      console.log(data);
+    console.log(data);
 
-      let res = data.data;
-      return res;
-    } else {
-      throw new Error('Failed to fetch data');
-    }
+    let res = data.data;
+    return res;
   } catch (error) {
     console.log(error);
     return null;
@@ -676,7 +655,7 @@ async function updateApplicationStep(applicationId) {
       redirect: 'follow',
     };
 
-    await fetch(
+    await fetchData(
       `https://hiring.amazon.${site}/application/api/candidate-application/update-workflow-step-name`,
       requestOptions
     );
@@ -688,4 +667,74 @@ async function updateApplicationStep(applicationId) {
 function today() {
   const today = new Date().toISOString().split('T')[0];
   return today;
+}
+
+let logsData = new Map();
+
+async function fetchData(url, options = {}, isFetchJob = false) {
+  let time = new Date().toUTCString();
+  let id = uid();
+  const response = await fetch(url, options);
+
+  let data = {
+    url: url,
+    payload: options.body,
+    method: options.method || 'GET',
+    response: null,
+    time: time,
+  };
+
+  if (!response.ok) {
+    logsData.set(id, data);
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  let responseData = await response.json();
+  data.response = responseData;
+
+  if (isFetchJob) {
+    if (!responseData.data.searchJobCardsByLocation.jobCards.length) {
+      console.log('skipped log');
+      return responseData;
+    }
+  }
+  logsData.set(id, data);
+  return responseData;
+}
+
+// setInterval(saveLogs, 1000 * 60 * 1); // every
+
+async function saveLogs() {
+  console.log('Saving logs...');
+  if (logsData.size < 2) return;
+
+  let keys = Array.from(logsData.keys());
+
+  let startTime = logsData.get(keys[0]).time;
+  let endTime = logsData.get(keys[keys.length - 1]).time;
+
+  const payload = {
+    sessionTime: `${startTime} - ${endTime}`,
+    data: [],
+  };
+
+  keys.forEach((key) => {
+    let data = logsData.get(key);
+    logsData.delete(key);
+    payload.data.push(data);
+  });
+
+  let res = await fetch('http://localhost:3000/log', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (res.ok) {
+    console.log('Logs saved successfully');
+  } else {
+    console.error('Failed to save logs');
+  }
 }

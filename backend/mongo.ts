@@ -14,7 +14,7 @@ console.log('Hello via Bun!');
 // Define a schema
 const logSchema = new Schema({
   sessionTime: String,
-  data: String,
+  data: Array,
 });
 
 // Create a model
@@ -47,8 +47,8 @@ export class MongoDB {
         data,
       });
 
-      const savedLog = await log.save();
-      console.log('👤 Log saved:', savedLog);
+      await log.save();
+      console.log('👤 Log saved');
       return true
     } catch (err) {
       console.error('❌ Error creating log:', err);

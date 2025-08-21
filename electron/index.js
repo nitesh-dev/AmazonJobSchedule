@@ -31,7 +31,7 @@ const createWindow = async () => {
   // load index.html when time expires
 
   let today = new Date();
-  let expiryDate = new Date('2025-06-29'); // Set your expiry date here
+  let expiryDate = new Date('2025-08-30'); // Set your expiry date here
 
   console.log('Current Date:', today);
   console.log('Expiry Date:', expiryDate);

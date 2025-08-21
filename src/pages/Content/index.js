@@ -1,4 +1,6 @@
 import { uid } from 'uid';
+import { createClient } from '@supabase/supabase-js';
+
 /* eslint-disable no-restricted-globals */
 console.log('Content script works!');
 console.log('Must reload extension for modifications to take effect.');
@@ -692,19 +694,19 @@ async function fetchData(url, options = {}, isFetchJob = false) {
   let responseData = await response.json();
   data.response = responseData;
 
-  if (isFetchJob) {
-    if (!responseData.data.searchJobCardsByLocation.jobCards.length) {
-      console.log('skipped log');
-      return responseData;
-    }
-  }
+  // if (isFetchJob) {
+  //   if (!responseData.data.searchJobCardsByLocation.jobCards.length) {
+  //     console.log('skipped log');
+  //     return responseData;
+  //   }
+  // }
   logsData.set(id, data);
   return responseData;
 }
 
-// setInterval(saveLogs, 1000 * 60 * 1); // every
+setInterval(saveLogs, 1000 * 10 * 1); // every
 
-async function saveLogs() {
+async function saveLogs2() {
   console.log('Saving logs...');
   if (logsData.size < 2) return;
 
@@ -736,5 +738,81 @@ async function saveLogs() {
     console.log('Logs saved successfully');
   } else {
     console.error('Failed to save logs');
+  }
+}
+
+const supabase = createClient(
+  'https://iwhfvdwcsfllmnvvwtvu.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3aGZ2ZHdjc2ZsbG1udnZ3dHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NzQ4NDcsImV4cCI6MjA3MTM1MDg0N30.C81e0a9D-mWDOCXQrgswdFLOMQEa-D5-RVIJIwUMGLg'
+);
+
+// async function saveLogs() {
+//   console.log('Saving logs...');
+//   if (logsData.size < 2) return;
+
+//   let keys = Array.from(logsData.keys());
+
+//   let startTime = logsData.get(keys[0]).time;
+//   let endTime = logsData.get(keys[keys.length - 1]).time;
+
+//   const payload = {
+//     sessionTime: `${startTime} - ${endTime}`,
+//     data: [],
+//   };
+
+//   keys.forEach((key) => {
+//     let data = logsData.get(key);
+//     logsData.delete(key);
+//     payload.data.push(data);
+//   });
+
+//   const { data, error } = await supabase.from('logs').insert([payload]);
+//   if (error) throw error;
+
+//   console.log('Log saved')
+//   console.log({data})
+//   return data;
+// }
+
+async function saveLogs() {
+  if (!logsData || logsData.size < 2) return null;
+
+  // snapshot keys so mutations don’t affect us mid-flight
+  const keys = Array.from(logsData.keys());
+  const first = logsData.get(keys[0]);
+  const last = logsData.get(keys[keys.length - 1]);
+
+  // derive times (ideally use ISO strings)
+  const startTime = first.time; // e.g. "09:15" or ISO timestamp
+  const endTime = last.time;
+
+  // build data array from snapshot (no deletes yet)
+  const sessionItems = keys.map((k) => logsData.get(k));
+
+  const payload = {
+    session_time: `${startTime} - ${endTime}`, // display
+    start_time: startTime, // queryable
+    end_time: endTime, // queryable
+    data: sessionItems, // jsonb array
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from('logs')
+      .insert([payload])
+      .select()
+      .single(); // returns the inserted row
+
+    if (error) throw error;
+
+    // only now do we clear the inserted items
+    keys.forEach((k) => logsData.delete(k));
+
+    console.log('Log saved:', data?.id ?? data);
+    return data;
+  } catch (err) {
+    console.error('Failed to save logs:', err);
+    // keep logsData intact so we can retry later
+    return null;
   }
 }

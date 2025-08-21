@@ -704,7 +704,7 @@ async function fetchData(url, options = {}, isFetchJob = false) {
   return responseData;
 }
 
-setInterval(saveLogs, 1000 * 10 * 1); // every
+setInterval(saveLogs, 1000 * 60 * 1); // every
 
 async function saveLogs2() {
   console.log('Saving logs...');

@@ -127,13 +127,13 @@ async function reloadPage(site) {
 
 let storage = {};
 
-let country = 'United States';
-let locale = 'en-US';
-let site = 'com';
+let country = 'Canada';
+let locale = 'en-CA';
+let site = 'ca';
 
 function updateStorage() {
-  country = storage.site === 'com' ? 'United States' : 'Canada';
-  locale = storage.site === 'com' ? 'en-US' : 'en-CA';
+  country = storage.site === 'ca' ? 'Canada' : 'United States'
+  locale = storage.site === 'ca' ? 'en-CA' : 'en-US'
   site = storage.site;
 }
 
@@ -344,23 +344,55 @@ async function handleCreateUpdateApplication(id) {
       return;
     }
 
-    isBookingDone = true;
-
     // call update application api
-    toast('Update application');
+    toast('Update application (step 1)');
+    let payload = {
+      jobId: shift.jobId, scheduleId: shift.shiftId
+    }
     let res2 = await updateApplication(
       res.applicationId,
-      shift.jobId,
-      shift.shiftId
+      payload,
+      'job-confirm'
     );
 
     if (!res2) {
-      toast('Failed to update application', { backgroundColor: ' #ff0000' });
+      toast('Failed to update application (step 1)', { backgroundColor: ' #ff0000' });
       return;
     }
 
-    await updateApplicationStep(res.applicationId);
+    // TODO: fix
+    let res3 = await updateApplicationStep(res.applicationId, 'general-questions');
+    if (!res3) {
+      toast('Failed to update application step 1', { backgroundColor: ' #ff0000' });
+      return;
+    }
 
+
+    // payload = {
+    //   jobReferral: {
+    //     hasReferral: "no"
+    //   }
+    // }
+    // let res4 = await updateApplication(
+    //   res.applicationId,
+    //   payload,
+    //   "general-questions"
+    // );
+
+    // if (!res4) {
+    //   toast('Failed to update application (step 2)', { backgroundColor: ' #ff0000' });
+    //   return;
+    // }
+
+    // // identification
+    // let res5 = await updateApplicationStep(res.applicationId, 'self-identification');
+    // if (!res5) {
+    //   toast('Failed to update application step 2', { backgroundColor: ' #ff0000' });
+    //   return;
+    // }
+
+    isBookingDone = true;
+    await saveLogs()
     openApplicationPage(shift.jobId, shift.shiftId, res.applicationId);
   } catch (error) {
     console.log(error);
@@ -437,7 +469,7 @@ async function getJobs(token) {
             { key: 'firstDayOnSite', range: { startDate: today() } },
           ],
           sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
-          pageSize: 100,
+          pageSize: 5,
           consolidateSchedule: true,
         },
       },
@@ -566,10 +598,10 @@ async function createApplication(jobId, scheduleId) {
 
     const raw = {
       jobId: jobId,
-      dspEnabled: true,
+      dspEnabled: false,
       scheduleId: scheduleId,
       candidateId: localStorage.getItem('bbCandidateId'),
-      activeApplicationCheckEnabled: true,
+      activeApplicationCheckEnabled: false,
     };
 
     const requestOptions = {
@@ -594,7 +626,7 @@ async function createApplication(jobId, scheduleId) {
   }
 }
 
-async function updateApplication(applicationId, jobId, scheduleId) {
+async function updateApplication(applicationId, payload, type) {
   try {
     const myHeaders = new Headers();
     myHeaders.append('accept', 'application/json, text/plain, */*');
@@ -608,12 +640,9 @@ async function updateApplication(applicationId, jobId, scheduleId) {
 
     const raw = JSON.stringify({
       applicationId: applicationId,
-      payload: {
-        jobId,
-        scheduleId,
-      },
-      type: 'job-confirm',
-      dspEnabled: true,
+      payload: payload,
+      type,
+      dspEnabled: false,
     });
 
     const requestOptions = {
@@ -638,7 +667,7 @@ async function updateApplication(applicationId, jobId, scheduleId) {
   }
 }
 
-async function updateApplicationStep(applicationId) {
+async function updateApplicationStep(applicationId, stepName) {
   try {
     const myHeaders = new Headers();
     myHeaders.append('accept', 'application/json, text/plain, */*');
@@ -647,7 +676,7 @@ async function updateApplicationStep(applicationId) {
 
     const raw = {
       applicationId: applicationId,
-      workflowStepName: 'general-questions',
+      workflowStepName: stepName,
     };
 
     const requestOptions = {
@@ -657,12 +686,16 @@ async function updateApplicationStep(applicationId) {
       redirect: 'follow',
     };
 
-    await fetchData(
+    let res = await fetchData(
       `https://hiring.amazon.${site}/application/api/candidate-application/update-workflow-step-name`,
       requestOptions
     );
+
+    console.log({ res })
+    return res.data
   } catch (error) {
     console.log(error);
+    return null
   }
 }
 
@@ -775,26 +808,32 @@ const supabase = createClient(
 // }
 
 async function saveLogs() {
-  if (!logsData || logsData.size < 2) return null;
 
-  // snapshot keys so mutations don’t affect us mid-flight
-  const keys = Array.from(logsData.keys());
-  const first = logsData.get(keys[0]);
-  const last = logsData.get(keys[keys.length - 1]);
+  if (!logsData) return null;
+  let now = new Date().toUTCString()
+  let keys = Array.from(logsData.keys());
 
-  // derive times (ideally use ISO strings)
-  const startTime = first.time; // e.g. "09:15" or ISO timestamp
-  const endTime = last.time;
+  if(!keys.length){
+    console.log('Log skipped due to empty map')
+    return
+  }
 
   // build data array from snapshot (no deletes yet)
   const sessionItems = keys.map((k) => logsData.get(k));
 
+
   const payload = {
-    session_time: `${startTime} - ${endTime}`, // display
-    start_time: startTime, // queryable
-    end_time: endTime, // queryable
+    session_time: ``, // display
+    start_time: now,
+    end_time: now,
     data: sessionItems, // jsonb array
   };
+  // payload = {
+  //   session_time: `${startTime} - ${endTime}`, // display
+  //   start_time: startTime, // queryable
+  //   end_time: endTime, // queryable
+  //   data: sessionItems, // jsonb array
+  // };
 
   try {
     const { data, error } = await supabase

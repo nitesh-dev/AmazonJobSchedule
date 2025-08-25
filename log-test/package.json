@@ -1,0 +1,16 @@
+{
+  "name": "log-test",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "bun run index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@supabase/supabase-js": "^2.55.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

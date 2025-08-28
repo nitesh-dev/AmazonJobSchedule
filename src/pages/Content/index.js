@@ -1,5 +1,6 @@
 import { uid } from 'uid';
 import { createClient } from '@supabase/supabase-js';
+import ws from 'ws'
 
 /* eslint-disable no-restricted-globals */
 console.log('Content script works!');
@@ -161,10 +162,18 @@ async function start() {
   updateStorage();
   console.log({ storage });
 
+  if (url.includes('withdraw-applications')) {
+    withdrawAllApplications()
+    return
+  }
+
+
   if (!storage.activated) {
     toast('Extension is not activated');
     return;
   }
+
+
 
 
   if (url.includes('bot=true')) {
@@ -201,7 +210,7 @@ function startPolling() {
 
     try {
       if (!storage.lessLog) toast('Fetching jobs...');
-      let jobs = await getJobs(getToken());
+      let jobs = await getJobs();
 
       let allJobsCount = jobs.length;
 
@@ -286,7 +295,7 @@ async function handleJobs(jobs) {
     // skip if old jobs are fetched
     let isExist = hasJobExist(job.jobId);
     if (isExist) return;
-    const shifts = await getShift(job.jobId, getToken());
+    const shifts = await getShift(job.jobId);
 
     toast(`Shift found: ${shifts.length}`, {
       backgroundColor: ' #1565c0',
@@ -372,19 +381,19 @@ async function handleCreateUpdateApplication(id) {
 
     // get shift data
     let shift = allShifts.get(id);
-    
+
     // await sleep(4 * 1000)
     // call create application api
     toast('Apply for application');
     let res = await createApplication(shift.jobId, shift.shiftId);
 
-    
+
     if (!res) {
       toast('Failed to book application', { backgroundColor: ' #ff0000' });
       return;
     }
     // await sleep(4 * 1000)
-    
+
     // call update application api
     toast('Update application (step 1)');
     let payload = {
@@ -396,12 +405,17 @@ async function handleCreateUpdateApplication(id) {
       'job-confirm'
     );
 
-    
+
     if (!res2) {
       toast('Failed to update application (step 1)', { backgroundColor: ' #ff0000' });
       return;
     }
-    // await sleep(4 * 1000)
+
+
+    await handleWsRequest(res.applicationId)
+
+
+
 
     // TODO: fix
     let res3 = await updateApplicationStep(res.applicationId, 'general-questions');
@@ -463,6 +477,30 @@ async function handleCreateUpdateApplication(id) {
   }
 }
 
+
+
+async function handleWsRequest(applicationId) {
+
+  let candidateId = localStorage.getItem("bbCandidateId")
+  let authToken = localStorage.getItem("accessToken")
+  let url = `wss://ufatez9oyf.execute-api.us-east-1.amazonaws.com/prod?applicationId=${applicationId}&candidateId=${candidateId}&authToken=${authToken}`
+  const ws = await connectWebSocket(url)
+
+  console.log("WS connected for app_id: " + applicationId);
+
+  // ws.send("Hello server 👋");
+
+  for await (const msg of receiveMessages(ws)) {
+    console.log("Got:", msg);
+    // if (msg.includes("Hello")) {
+    //   console.log("Closing connection...");
+    //   ws.close(); // gracefully close
+    // }
+  }
+
+  console.log("WS closed for app_id: " + applicationId);
+}
+
 function openApplicationPage(jobId, shiftId, applicationId) {
   let url = `https://hiring.amazon.${site}/application/us/?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1#/general-questions?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1&applicationId=${applicationId}&bot=true`;
   window.location.href = url;
@@ -485,19 +523,30 @@ function saveLocations(locations) {
   chrome.storage.local.set({ locations: locations });
 }
 
-async function getJobs(token) {
+
+
+
+function getCommonHeader() {
+  const myHeaders = new Headers();
+  myHeaders.append('authorization', localStorage.getItem('accessToken'));
+  myHeaders.append('accept', 'application/json, text/plain, */*');
+  myHeaders.append('content-type', 'application/json;charset=UTF-8');
+  myHeaders.append(
+    'user-agent',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+  );
+  myHeaders.append("cookie", document.cookie)
+  myHeaders.append('country', country);
+
+
+  return myHeaders
+}
+
+
+async function getJobs() {
   try {
-    const myHeaders = new Headers();
-
-    myHeaders.append('authorization', token);
-    myHeaders.append('content-type', 'application/json');
-    myHeaders.append('country', country);
-    myHeaders.append(
-      'user-agent',
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
-    );
-
-    myHeaders.append("cookie", document.cookie)
+    const myHeaders = getCommonHeader()
+    myHeaders.set("authorization", getToken())
 
     const graphql = JSON.stringify({
       query:
@@ -574,18 +623,10 @@ async function getJobs(token) {
   }
 }
 
-async function getShift(jobId, token) {
+async function getShift(jobId) {
   try {
-    const myHeaders = new Headers();
-
-    myHeaders.append('authorization', token);
-    myHeaders.append('content-type', 'application/json');
-    myHeaders.append('country', country);
-    myHeaders.append(
-      'user-agent',
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
-    );
-    myHeaders.append("cookie", document.cookie)
+    const myHeaders = getCommonHeader()
+    myHeaders.set("authorization", getToken())
 
     const graphql = JSON.stringify({
       query:
@@ -655,14 +696,8 @@ async function createApplication(jobId, scheduleId) {
   // authorization token - accessToken
 
   try {
-    const myHeaders = new Headers();
-    myHeaders.append('authorization', localStorage.getItem('accessToken'));
-    myHeaders.append('content-type', 'application/json;charset=UTF-8');
-    myHeaders.append(
-      'user-agent',
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
-    );
-    myHeaders.append("cookie", document.cookie)
+
+    const myHeaders = getCommonHeader()
 
     const raw = {
       jobId: jobId,
@@ -696,16 +731,7 @@ async function createApplication(jobId, scheduleId) {
 
 async function updateApplication(applicationId, payload, type) {
   try {
-    const myHeaders = new Headers();
-    myHeaders.append('accept', 'application/json, text/plain, */*');
-    myHeaders.append('content-type', 'application/json;charset=UTF-8');
-    myHeaders.append('authorization', localStorage.getItem('accessToken'));
-
-    myHeaders.append(
-      'user-agent',
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
-    );
-    myHeaders.append("cookie", document.cookie)
+    const myHeaders = getCommonHeader()
 
     const raw = JSON.stringify({
       applicationId: applicationId,
@@ -738,15 +764,7 @@ async function updateApplication(applicationId, payload, type) {
 
 async function updateApplicationStep(applicationId, stepName) {
   try {
-    const myHeaders = new Headers();
-    myHeaders.append('accept', 'application/json, text/plain, */*');
-    myHeaders.append('authorization', localStorage.getItem('accessToken'));
-    myHeaders.append('content-type', 'application/json;charset=UTF-8');
-    myHeaders.append(
-      'user-agent',
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
-    );
-    myHeaders.append("cookie", document.cookie)
+    const myHeaders = getCommonHeader()
 
     const raw = {
       applicationId: applicationId,
@@ -774,25 +792,69 @@ async function updateApplicationStep(applicationId, stepName) {
 }
 
 
+async function withdrawAllApplications() {
+
+  try {
+
+    toast("Getting all applications")
+
+    const myHeaders = getCommonHeader()
+    myHeaders.set("accesstoken", localStorage.getItem('accessToken'));
+    myHeaders.set("authorization", "Bearer token");
+
+    const graphql = JSON.stringify({
+      query: "query queryApplicationsByBBCandidateIdV2($locale: String!, $bbCandidateId: String!) {\n  queryApplicationsByBBCandidateIdV2(\n    locale: $locale\n    bbCandidateId: $bbCandidateId\n  ) {\n    didAllApplicationsLoaded\n    applications {\n      active\n      submitted\n      applicationId\n      applicationState\n    }\n    __typename\n  }\n}\n",
+      variables: { "locale": locale, "bbCandidateId": localStorage.getItem("bbCandidateId") }
+    })
+    const requestOptions = {
+      method: "POST",
+      headers: myHeaders,
+      body: graphql,
+      redirect: "follow"
+    };
+
+
+    let res = await fetchData(
+      'https://zuzm2l7jovcizd7movvfj7qt3y.appsync-api.us-east-1.amazonaws.com/graphql',
+      requestOptions
+    );
+
+
+    console.log({ res })
+
+
+    for (const element of res.data.queryApplicationsByBBCandidateIdV2.applications) {
+      if (element.active) {
+        let r = await withdrawApplication(element.applicationId)
+        r ? toast(`withdrawn ${element.applicationId}`, { backgroundColor: ' #1565c0' }) : toast(`failed to withdraw ${element.applicationId}`, { backgroundColor: ' #ff0000' })
+        await sleep(3000)
+      }
+    }
+
+  } catch (error) {
+    console.error(error)
+    toast("Something went wrong")
+
+  }
+
+
+
+}
+
+
 async function withdrawApplication(applicationId) {
   try {
-    const myHeaders = new Headers();
-
-    myHeaders.append('authorization', localStorage.getItem('accessToken'));
-    myHeaders.append('content-type', 'application/json');
-    myHeaders.append('country', country);
-    myHeaders.append(
-      'user-agent',
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
-    );
-    myHeaders.append("cookie", document.cookie)
+    const myHeaders = getCommonHeader()
+    myHeaders.set('accesstoken', localStorage.getItem('accessToken'))
+    myHeaders.set('authorization', "Bearer token")
+    let values = ["Not interested in job location", "None of the above reasons", "Shift doesn't work for me", "Pay rate doesn't meet expectation"]
 
     const graphql = JSON.stringify({
       query: "mutation MyMutation($input: withdrawApplicationsInput!) {\n  withdrawApplications(input: $input) {\n    error\n    statusCode\n    __typename\n  }\n}\n",
       variables: {
         input: {
-          bbCandidateId: localStorage.getItem(bbCandidateId),
-          withdrawReason: "Not interested in job location",
+          bbCandidateId: localStorage.getItem("bbCandidateId"),
+          withdrawReason: values[Math.round(Math.random() * (values.length - 1))],
           sfApplications: [],
           bbApplications: [applicationId]
         }
@@ -805,14 +867,14 @@ async function withdrawApplication(applicationId) {
       redirect: 'follow',
     };
 
-    let data = await fetchData(
+    let res = await fetchData(
       'https://zuzm2l7jovcizd7movvfj7qt3y.appsync-api.us-east-1.amazonaws.com/graphql',
       requestOptions
     );
 
-    console.log(data)
+    console.log(res)
 
-    console.log({ res: data.data })
+    console.log({ res: res.data })
     return res.data
   } catch (error) {
     console.log(error);
@@ -976,3 +1038,38 @@ async function saveLogs() {
     return null;
   }
 }
+
+
+
+function connectWebSocket(url) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+
+    ws.onopen = () => resolve(ws);
+    ws.onerror = (err) => reject(err);
+  });
+}
+
+async function* receiveMessages(ws) {
+  const queue = [];
+  let resolveNext;
+
+  ws.onmessage = (event) => {
+    if (resolveNext) {
+      resolveNext({ value: event.data, done: false });
+      resolveNext = null;
+    } else {
+      queue.push(event.data);
+    }
+  };
+
+  while (true) {
+    if (queue.length > 0) {
+      yield queue.shift();
+    } else {
+      yield await new Promise(res => (resolveNext = res));
+    }
+  }
+}
+
+

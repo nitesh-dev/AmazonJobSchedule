@@ -112,8 +112,7 @@ function loadStorage() {
   });
 }
 
-async function reloadPage(site) {
-  await sleep(1000);
+async function openJobSearchPage() {
   // reload the page
 
   // reload if site is same
@@ -137,15 +136,39 @@ function updateStorage() {
   site = storage.site;
 }
 
+
+let autoRedirectTimer = null
+async function autoRedirect() {
+  console.log('check for auto redirect...')
+  let url = document.URL;
+
+  if (url.includes('job-opportunities')) {
+
+    let params = new URLSearchParams(document.location.search);
+    // TODO: withdraw application
+    clearInterval(autoRedirectTimer)
+
+    toast('Withdraw application');
+    await withdrawApplication(params.get("applicationId"))
+    openJobSearchPage()
+  }
+}
+
 async function start() {
   let url = document.URL;
 
   storage = await loadStorage();
+  updateStorage();
   console.log({ storage });
 
   if (!storage.activated) {
     toast('Extension is not activated');
     return;
+  }
+
+
+  if (url.includes('bot=true')) {
+    // autoRedirectTimer = setInterval(autoRedirect.bind(this), 1000)
   }
 
   let allowExecute = url.includes('search/warehouse-jobs');
@@ -154,7 +177,6 @@ async function start() {
     return;
   }
 
-  updateStorage();
 
   toast('Extension is running');
   startPolling();
@@ -302,6 +324,19 @@ function getNextKey(map, currentKey) {
   return undefined; // No next key found
 }
 
+
+function getPreviousKey(map, currentKey) {
+  let prev = undefined;
+  for (let key of map.keys()) {
+    if (key === currentKey) {
+      return prev; // the previous key (or undefined if currentKey is the first)
+    }
+    prev = key;
+  }
+  return undefined; // currentKey not found
+}
+
+
 // used for non-bulk options
 async function triggerCreateApplicationProcess() {
   if (isCreateApplicationProcessRunning) {
@@ -312,12 +347,13 @@ async function triggerCreateApplicationProcess() {
   isCreateApplicationProcessRunning = true;
 
   // get first key
-  let oldApplicationKey = allShifts.keys().next().value;
+  // let oldApplicationKey = allShifts.keys().next().value;
+  let oldApplicationKey = [...allShifts.keys()].pop();
   let triggerCount = 0;
   while (oldApplicationKey) {
     triggerCount++;
     await handleCreateUpdateApplication(oldApplicationKey);
-    oldApplicationKey = getNextKey(allShifts, oldApplicationKey);
+    oldApplicationKey = getPreviousKey(allShifts, oldApplicationKey);
   }
 
   toast('Trigger closed');
@@ -329,21 +365,26 @@ async function handleCreateUpdateApplication(id) {
   // toast('Update create application');
   // return;
 
+  console.log({ cookie: document.cookie })
+
   try {
     if (isBookingDone) return;
 
     // get shift data
     let shift = allShifts.get(id);
-
+    
+    // await sleep(4 * 1000)
     // call create application api
     toast('Apply for application');
     let res = await createApplication(shift.jobId, shift.shiftId);
 
+    
     if (!res) {
       toast('Failed to book application', { backgroundColor: ' #ff0000' });
       return;
     }
-
+    // await sleep(4 * 1000)
+    
     // call update application api
     toast('Update application (step 1)');
     let payload = {
@@ -355,10 +396,12 @@ async function handleCreateUpdateApplication(id) {
       'job-confirm'
     );
 
+    
     if (!res2) {
       toast('Failed to update application (step 1)', { backgroundColor: ' #ff0000' });
       return;
     }
+    // await sleep(4 * 1000)
 
     // TODO: fix
     let res3 = await updateApplicationStep(res.applicationId, 'general-questions');
@@ -391,6 +434,27 @@ async function handleCreateUpdateApplication(id) {
     //   return;
     // }
 
+
+    // payload = {
+    //   selfIdentificationInfo: {
+    //     ethnicity: "I choose not to Self-Identify",
+    //     gender: "Male"
+
+    //   }
+    // }
+
+
+    // let res6 = await updateApplication(
+    //   res.applicationId,
+    //   payload,
+    //   "equal-opportunity-form"
+    // );
+
+    // if (!res6) {
+    //   toast('Failed to update application (step 3)', { backgroundColor: ' #ff0000' });
+    //   return;
+    // }
+
     isBookingDone = true;
     await saveLogs()
     openApplicationPage(shift.jobId, shift.shiftId, res.applicationId);
@@ -400,7 +464,7 @@ async function handleCreateUpdateApplication(id) {
 }
 
 function openApplicationPage(jobId, shiftId, applicationId) {
-  let url = `https://hiring.amazon.${site}/application/us/?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1#/general-questions?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1&applicationId=${applicationId}`;
+  let url = `https://hiring.amazon.${site}/application/us/?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1#/general-questions?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1&applicationId=${applicationId}&bot=true`;
   window.location.href = url;
 }
 
@@ -432,6 +496,8 @@ async function getJobs(token) {
       'user-agent',
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
     );
+
+    myHeaders.append("cookie", document.cookie)
 
     const graphql = JSON.stringify({
       query:
@@ -519,6 +585,7 @@ async function getShift(jobId, token) {
       'user-agent',
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
     );
+    myHeaders.append("cookie", document.cookie)
 
     const graphql = JSON.stringify({
       query:
@@ -595,6 +662,7 @@ async function createApplication(jobId, scheduleId) {
       'user-agent',
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
     );
+    myHeaders.append("cookie", document.cookie)
 
     const raw = {
       jobId: jobId,
@@ -637,12 +705,13 @@ async function updateApplication(applicationId, payload, type) {
       'user-agent',
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
     );
+    myHeaders.append("cookie", document.cookie)
 
     const raw = JSON.stringify({
       applicationId: applicationId,
       payload: payload,
       type,
-      dspEnabled: false,
+      dspEnabled: true,
     });
 
     const requestOptions = {
@@ -673,6 +742,11 @@ async function updateApplicationStep(applicationId, stepName) {
     myHeaders.append('accept', 'application/json, text/plain, */*');
     myHeaders.append('authorization', localStorage.getItem('accessToken'));
     myHeaders.append('content-type', 'application/json;charset=UTF-8');
+    myHeaders.append(
+      'user-agent',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+    );
+    myHeaders.append("cookie", document.cookie)
 
     const raw = {
       applicationId: applicationId,
@@ -692,6 +766,53 @@ async function updateApplicationStep(applicationId, stepName) {
     );
 
     console.log({ res })
+    return res.data
+  } catch (error) {
+    console.log(error);
+    return null
+  }
+}
+
+
+async function withdrawApplication(applicationId) {
+  try {
+    const myHeaders = new Headers();
+
+    myHeaders.append('authorization', localStorage.getItem('accessToken'));
+    myHeaders.append('content-type', 'application/json');
+    myHeaders.append('country', country);
+    myHeaders.append(
+      'user-agent',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+    );
+    myHeaders.append("cookie", document.cookie)
+
+    const graphql = JSON.stringify({
+      query: "mutation MyMutation($input: withdrawApplicationsInput!) {\n  withdrawApplications(input: $input) {\n    error\n    statusCode\n    __typename\n  }\n}\n",
+      variables: {
+        input: {
+          bbCandidateId: localStorage.getItem(bbCandidateId),
+          withdrawReason: "Not interested in job location",
+          sfApplications: [],
+          bbApplications: [applicationId]
+        }
+      }
+    });
+    const requestOptions = {
+      method: 'POST',
+      headers: myHeaders,
+      body: graphql,
+      redirect: 'follow',
+    };
+
+    let data = await fetchData(
+      'https://zuzm2l7jovcizd7movvfj7qt3y.appsync-api.us-east-1.amazonaws.com/graphql',
+      requestOptions
+    );
+
+    console.log(data)
+
+    console.log({ res: data.data })
     return res.data
   } catch (error) {
     console.log(error);
@@ -813,7 +934,7 @@ async function saveLogs() {
   let now = new Date().toUTCString()
   let keys = Array.from(logsData.keys());
 
-  if(!keys.length){
+  if (!keys.length) {
     console.log('Log skipped due to empty map')
     return
   }

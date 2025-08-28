@@ -310,6 +310,8 @@ async function handleJobs(jobs) {
         id: id,
         jobId: job.jobId,
         shiftId: shift.shiftId,
+        state: shift.state,
+        employmentType: shift.employmentType,
         createdAt: Date.now(),
       });
 
@@ -356,13 +358,13 @@ async function triggerCreateApplicationProcess() {
   isCreateApplicationProcessRunning = true;
 
   // get first key
-  // let oldApplicationKey = allShifts.keys().next().value;
-  let oldApplicationKey = [...allShifts.keys()].pop();
+  let oldApplicationKey = allShifts.keys().next().value;
+  // let oldApplicationKey = [...allShifts.keys()].pop();
   let triggerCount = 0;
   while (oldApplicationKey) {
     triggerCount++;
     await handleCreateUpdateApplication(oldApplicationKey);
-    oldApplicationKey = getPreviousKey(allShifts, oldApplicationKey);
+    oldApplicationKey = getNextKey(allShifts, oldApplicationKey);
   }
 
   toast('Trigger closed');
@@ -412,7 +414,7 @@ async function handleCreateUpdateApplication(id) {
     }
 
 
-    await handleWsRequest(res.applicationId)
+    // await handleWsRequest(res.applicationId, shift.jobId, shift.shiftId, shift.employmentType, shift.state)
 
 
 
@@ -479,24 +481,87 @@ async function handleCreateUpdateApplication(id) {
 
 
 
-async function handleWsRequest(applicationId) {
+async function handleWsRequest(applicationId, jobId, scheduleId, employmentType, state) {   /// take from schedule api (employmentType, state)
 
   let candidateId = localStorage.getItem("bbCandidateId")
   let authToken = localStorage.getItem("accessToken")
   let url = `wss://ufatez9oyf.execute-api.us-east-1.amazonaws.com/prod?applicationId=${applicationId}&candidateId=${candidateId}&authToken=${authToken}`
   const ws = await connectWebSocket(url)
+  console.log({ ws })
 
   console.log("WS connected for app_id: " + applicationId);
+  ws.send("hi")
+  ws.send(JSON.stringify({
+    action: "startWorkflow",
+    applicationId: applicationId,
+    candidateId: candidateId,
+    jobId: jobId,
+    scheduleId: scheduleId,
+    partitionAttributes: {
+      countryCodes: [
+        "US"  // TODO fix this
+      ]
+    },
+    filteringSeasonal: false,
+    filteringRegular: false,
+    domainType: "CS"
+  }))
+
+  await sleep(1000)
+
+  ws.send(JSON.stringify({
+    "action": "completeTask",
+    "applicationId": applicationId,
+    "candidateId": candidateId,
+    "requisitionId": "",
+    "jobId": jobId,
+    "domainType": "CS",
+    "state": state,
+    "employmentType": employmentType,
+    "eventSource": "HVH-CA-UI",
+    "jobSelectedOn": "2025-08-28T06:09:06.923Z",
+    "currentWorkflowStep": "job-opportunities",
+    "workflowStepName": "",
+    "partitionAttributes": {
+      "countryCodes": [
+        "US"
+      ]
+    },
+    "filteringSeasonal": false,
+    "filteringRegular": false
+  }))
+
+
+  await sleep(1000)
+
+  ws.send(JSON.stringify({
+    "action": "startWorkflow",
+    "applicationId": applicationId,
+    "candidateId": candidateId,
+    "jobId": jobId,
+    "scheduleId": scheduleId,
+    "partitionAttributes": {
+      "countryCodes": [
+        "US"
+      ]
+    },
+    "filteringSeasonal": false,
+    "filteringRegular": false,
+    "domainType": "CS"
+  }))
+
+  await sleep(1000)
 
   // ws.send("Hello server 👋");
 
-  for await (const msg of receiveMessages(ws)) {
-    console.log("Got:", msg);
-    // if (msg.includes("Hello")) {
-    //   console.log("Closing connection...");
-    //   ws.close(); // gracefully close
-    // }
-  }
+
+  // for await (const msg of receiveMessages(ws)) {
+  //   console.log("Got:", msg);
+  //   // if (msg.includes("Hello")) {
+  //   //   console.log("Closing connection...");
+  //   //   ws.close(); // gracefully close
+  //   // }
+  // }
 
   console.log("WS closed for app_id: " + applicationId);
 }
@@ -683,6 +748,8 @@ async function getShift(jobId) {
       return {
         shiftId: shift.scheduleId,
         hours: shift.hoursPerWeek,
+        employmentType: shift.employmentType,
+        state: shift.state
       };
     });
     return shifts;
@@ -826,8 +893,8 @@ async function withdrawAllApplications() {
     for (const element of res.data.queryApplicationsByBBCandidateIdV2.applications) {
       if (element.active) {
         let r = await withdrawApplication(element.applicationId)
-        r ? toast(`withdrawn ${element.applicationId}`, { backgroundColor: ' #1565c0' }) : toast(`failed to withdraw ${element.applicationId}`, { backgroundColor: ' #ff0000' })
-        await sleep(3000)
+        r.withdrawApplications ? toast(`withdrawn ${element.applicationId}`, { backgroundColor: ' #1565c0' }) : toast(`failed to withdraw ${element.applicationId}`, { backgroundColor: ' #ff0000' })
+        await sleep(12 * 1000)
       }
     }
 
@@ -1044,6 +1111,7 @@ async function saveLogs() {
 function connectWebSocket(url) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(url);
+
 
     ws.onopen = () => resolve(ws);
     ws.onerror = (err) => reject(err);

@@ -175,9 +175,68 @@ async function start() {
 
 
 
-
   if (url.includes('bot=true')) {
     // autoRedirectTimer = setInterval(autoRedirect.bind(this), 1000)
+
+
+
+    // Simulate async task
+    // setInterval(() => {
+    //   // Extract ID from URL
+    //   const urlParams = new URLSearchParams(window.location.search);
+
+
+    //   const customId = urlParams.get("botReqId");
+    //   console.log({ urlParams: urlParams.toString(), customId })
+    //   chrome.runtime.sendMessage({
+    //     type: "RESULT",
+    //     id: customId,
+    //     data: { success: true, msg: "Task finished!" }
+    //   });
+    // }, 10000);
+
+
+    if (
+      (url.includes(`application/${site}/?CS`) && url.includes('/consent'))
+    ) {
+      // e4s17lp0 css-1ipr55l no-available-shift
+      // candidateId - local storage: bbCandidateId
+      let interval = setInterval(async () => {
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const customId = urlParams.get("botReqId");
+        if (document.URL.includes('general-questions')) {
+
+          // send event for close searching
+          chrome.runtime.sendMessage({
+            type: "RESULT",
+            id: customId,
+            data: { success: true, msg: "Task finished!" }
+          });
+
+          clearInterval(interval);
+          return;
+        } else if (document.URL.includes('job-opportunities')) {
+          // send event for continue searching
+          chrome.runtime.sendMessage({
+            type: "RESULT",
+            id: customId,
+            data: { success: false, msg: "Task failed!" }
+          });
+          window.close()
+          clearInterval(interval);
+          return
+        }
+
+        // already-applied
+
+        await waitForSelector(['.e4s17lp0.css-1ipr55l'], 200);
+        clickElement('.e4s17lp0.css-1ipr55l');
+        console.log('Clicked on the create button');
+      }, 500);
+
+      return;
+    }
   }
 
   let allowExecute = url.includes('search/warehouse-jobs');
@@ -202,6 +261,7 @@ function startPolling() {
       // 🎯 Found a match, stop future polling
       clearInterval(interval);
       toast('Processing stopped');
+      alert('Booking done')
       return;
     }
     if (activeRequests >= MAX_CONCURRENT) return;
@@ -255,7 +315,7 @@ function startPolling() {
   }, delayGap); // Try every 200ms
 }
 
-start();
+
 
 /*  store shifts data
     {
@@ -376,55 +436,63 @@ async function handleCreateUpdateApplication(id) {
   // toast('Update create application');
   // return;
 
-  console.log({ cookie: document.cookie })
-
   try {
     if (isBookingDone) return;
 
     // get shift data
     let shift = allShifts.get(id);
 
+    toast("sending event")
+    let data = await openCreateApplicationPage(shift.jobId, shift.shiftId)
+    console.log({ event: data })
+    toast("Event complete")
+
+    if (!data.success) {
+      toast('Failed to book application', { backgroundColor: ' #ff0000' });
+      return
+    }
+
     // await sleep(4 * 1000)
     // call create application api
-    toast('Apply for application');
-    let res = await createApplication(shift.jobId, shift.shiftId);
+    // toast('Apply for application');
+    // let res = await createApplication(shift.jobId, shift.shiftId);
 
 
-    if (!res) {
-      toast('Failed to book application', { backgroundColor: ' #ff0000' });
-      return;
-    }
-    // await sleep(4 * 1000)
+    // if (!res) {
+    //   toast('Failed to book application', { backgroundColor: ' #ff0000' });
+    //   return;
+    // }
+    // // await sleep(4 * 1000)
 
-    // call update application api
-    toast('Update application (step 1)');
-    let payload = {
-      jobId: shift.jobId, scheduleId: shift.shiftId
-    }
-    let res2 = await updateApplication(
-      res.applicationId,
-      payload,
-      'job-confirm'
-    );
-
-
-    if (!res2) {
-      toast('Failed to update application (step 1)', { backgroundColor: ' #ff0000' });
-      return;
-    }
+    // // call update application api
+    // toast('Update application (step 1)');
+    // let payload = {
+    //   jobId: shift.jobId, scheduleId: shift.shiftId
+    // }
+    // let res2 = await updateApplication(
+    //   res.applicationId,
+    //   payload,
+    //   'job-confirm'
+    // );
 
 
-    // await handleWsRequest(res.applicationId, shift.jobId, shift.shiftId, shift.employmentType, shift.state)
+    // if (!res2) {
+    //   toast('Failed to update application (step 1)', { backgroundColor: ' #ff0000' });
+    //   return;
+    // }
+
+
+    // // await handleWsRequest(res.applicationId, shift.jobId, shift.shiftId, shift.employmentType, shift.state)
 
 
 
 
-    // TODO: fix
-    let res3 = await updateApplicationStep(res.applicationId, 'general-questions');
-    if (!res3) {
-      toast('Failed to update application step 1', { backgroundColor: ' #ff0000' });
-      return;
-    }
+    // // TODO: fix
+    // let res3 = await updateApplicationStep(res.applicationId, 'general-questions');
+    // if (!res3) {
+    //   toast('Failed to update application step 1', { backgroundColor: ' #ff0000' });
+    //   return;
+    // }
 
 
     // payload = {
@@ -478,6 +546,55 @@ async function handleCreateUpdateApplication(id) {
     console.log(error);
   }
 }
+
+
+
+async function openCreateApplicationPage(jobId, shiftId) {
+
+  let customId = jobId + shiftId
+  
+  let url = `https://hiring.amazon.${site}/application/${site}/?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1&bot=true&botReqId=${customId}#/consent?CS=true&jobId=${jobId}&locale=${site}&scheduleId=${shiftId}&ssoEnabled=1`;
+
+  return new Promise((resolve) => {
+    // store resolver in global map
+    pendingRequests.set(customId, resolve);
+
+    // notify background we're waiting
+    chrome.runtime.sendMessage({ type: "WAIT_FOR_RESULT", id: customId });
+
+    chrome.runtime.sendMessage({ type: "OPEN_NEW_TAB", id: customId, url });
+  });
+
+}
+
+
+
+
+// 🔹 Global pending map
+const pendingRequests = new Map();
+
+// 🔹 Global listener
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  console.log(msg, sender)
+  if (msg.type === "RESULT" && msg.id) {
+    const resolver = pendingRequests.get(msg.id);
+    if (resolver) {
+      resolver(msg.data);
+      pendingRequests.delete(msg.id); // cleanup
+    }
+  }
+});
+
+
+
+// chrome.runtime.onMessage.addListener(function listener(msg, sender, sendResponse) {
+//   console.log(msg, sender)
+//   // if (msg.type === "RESULT" && msg.id === customId) {
+//   //   resolve(msg.data);
+//   //   chrome.runtime.onMessage.removeListener(listener); // cleanup
+//   // }
+// });
+
 
 
 
@@ -1141,3 +1258,67 @@ async function* receiveMessages(ws) {
 }
 
 
+
+
+
+// multiple selector proceed when either one is available
+function waitForSelector(selectors, timeout = 10000) {
+  if (typeof selectors === 'string') selectors = [selectors];
+  return new Promise((resolve, reject) => {
+    const interval = 100;
+    let elapsed = 0;
+    const timer = setInterval(() => {
+      for (const selector of selectors) {
+        const el = document.querySelector(selector);
+        if (el) {
+          clearInterval(timer);
+          resolve(el);
+          return;
+        }
+      }
+      if ((elapsed += interval) >= timeout) {
+        clearInterval(timer);
+        reject(
+          new Error(`Timeout waiting for selectors: ${selectors.join(', ')}`)
+        );
+      }
+    }, interval);
+  });
+}
+
+function clickElement(selector) {
+  const element = document.querySelector(selector);
+  if (element) {
+    fakeUserInteraction(element);
+    const event = new MouseEvent('click', {
+      view: window,
+      bubbles: true,
+      cancelable: true,
+    });
+    element.dispatchEvent(event);
+    console.log('✅ Clicked:', selector);
+  } else {
+    console.warn('❌ Element not found:', selector);
+  }
+}
+
+function fakeUserInteraction(target) {
+  const mouseMove = new MouseEvent('mousemove', {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+  });
+  const mouseDown = new MouseEvent('mousedown', {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+  });
+  target.dispatchEvent(mouseMove);
+  target.dispatchEvent(mouseDown);
+}
+
+
+
+
+
+start();

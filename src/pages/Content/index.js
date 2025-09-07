@@ -175,69 +175,69 @@ async function start() {
 
 
 
-  if (url.includes('bot=true')) {
-    // autoRedirectTimer = setInterval(autoRedirect.bind(this), 1000)
+  // if (url.includes('bot=true')) {
+  //   // autoRedirectTimer = setInterval(autoRedirect.bind(this), 1000)
 
 
 
-    // Simulate async task
-    // setInterval(() => {
-    //   // Extract ID from URL
-    //   const urlParams = new URLSearchParams(window.location.search);
+  //   // Simulate async task
+  //   // setInterval(() => {
+  //   //   // Extract ID from URL
+  //   //   const urlParams = new URLSearchParams(window.location.search);
 
 
-    //   const customId = urlParams.get("botReqId");
-    //   console.log({ urlParams: urlParams.toString(), customId })
-    //   chrome.runtime.sendMessage({
-    //     type: "RESULT",
-    //     id: customId,
-    //     data: { success: true, msg: "Task finished!" }
-    //   });
-    // }, 10000);
+  //   //   const customId = urlParams.get("botReqId");
+  //   //   console.log({ urlParams: urlParams.toString(), customId })
+  //   //   chrome.runtime.sendMessage({
+  //   //     type: "RESULT",
+  //   //     id: customId,
+  //   //     data: { success: true, msg: "Task finished!" }
+  //   //   });
+  //   // }, 10000);
 
 
-    if (
-      (url.includes(`application/${site}/?CS`) && url.includes('/consent'))
-    ) {
-      // e4s17lp0 css-1ipr55l no-available-shift
-      // candidateId - local storage: bbCandidateId
-      let interval = setInterval(async () => {
+  //   if (
+  //     (url.includes(`application/${site}/?CS`) && url.includes('/consent'))
+  //   ) {
+  //     // e4s17lp0 css-1ipr55l no-available-shift
+  //     // candidateId - local storage: bbCandidateId
+  //     let interval = setInterval(async () => {
 
-        const urlParams = new URLSearchParams(window.location.search);
-        const customId = urlParams.get("botReqId");
-        if (document.URL.includes('general-questions')) {
+  //       const urlParams = new URLSearchParams(window.location.search);
+  //       const customId = urlParams.get("botReqId");
+  //       if (document.URL.includes('general-questions')) {
 
-          // send event for close searching
-          chrome.runtime.sendMessage({
-            type: "RESULT",
-            id: customId,
-            data: { success: true, msg: "Task finished!" }
-          });
+  //         // send event for close searching
+  //         chrome.runtime.sendMessage({
+  //           type: "RESULT",
+  //           id: customId,
+  //           data: { success: true, msg: "Task finished!" }
+  //         });
 
-          clearInterval(interval);
-          return;
-        } else if (document.URL.includes('job-opportunities')) {
-          // send event for continue searching
-          chrome.runtime.sendMessage({
-            type: "RESULT",
-            id: customId,
-            data: { success: false, msg: "Task failed!" }
-          });
-          window.close()
-          clearInterval(interval);
-          return
-        }
+  //         clearInterval(interval);
+  //         return;
+  //       } else if (document.URL.includes('job-opportunities')) {
+  //         // send event for continue searching
+  //         chrome.runtime.sendMessage({
+  //           type: "RESULT",
+  //           id: customId,
+  //           data: { success: false, msg: "Task failed!" }
+  //         });
+  //         window.close()
+  //         clearInterval(interval);
+  //         return
+  //       }
 
-        // already-applied
+  //       // already-applied
 
-        await waitForSelector(['.e4s17lp0.css-1ipr55l'], 200);
-        clickElement('.e4s17lp0.css-1ipr55l');
-        console.log('Clicked on the create button');
-      }, 500);
+  //       await waitForSelector(['.e4s17lp0.css-1ipr55l'], 200);
+  //       clickElement('.e4s17lp0.css-1ipr55l');
+  //       console.log('Clicked on the create button');
+  //     }, 500);
 
-      return;
-    }
-  }
+  //     return;
+  //   }
+  // }
 
   let allowExecute = url.includes('search/warehouse-jobs');
   if (!allowExecute) {
@@ -552,8 +552,9 @@ async function handleCreateUpdateApplication(id) {
 async function openCreateApplicationPage(jobId, shiftId) {
 
   let customId = jobId + shiftId
-  
-  let url = `https://hiring.amazon.${site}/application/${site}/?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1&bot=true&botReqId=${customId}#/consent?CS=true&jobId=${jobId}&locale=${site}&scheduleId=${shiftId}&ssoEnabled=1`;
+
+  let subPage = site == 'com'? 'us' : 'ca'
+  let url = `https://hiring.amazon.${site}/application/${subPage}/?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1&bot=true&botReqId=${customId}#/consent?CS=true&jobId=${jobId}&locale=${site}&scheduleId=${shiftId}&ssoEnabled=1`;
 
   return new Promise((resolve) => {
     // store resolver in global map

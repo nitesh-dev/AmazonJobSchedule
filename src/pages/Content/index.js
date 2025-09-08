@@ -1,14 +1,73 @@
+import { uid } from 'uid';
+import { createClient } from '@supabase/supabase-js';
+
 /* eslint-disable no-restricted-globals */
 console.log('Content script works!');
 console.log('Must reload extension for modifications to take effect.');
 
-// Inject Toastify CSS
-const toastifyCSS = document.createElement('link');
-toastifyCSS.rel = 'stylesheet';
-toastifyCSS.type = 'text/css';
-toastifyCSS.href =
-  'https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css';
-document.head.appendChild(toastifyCSS);
+function createToast(message, options = {}) {
+  const {
+    duration = 1000,
+    position = 'bottom-left',
+    backgroundColor = '#333',
+    textColor = '#fff',
+  } = options;
+
+  // Create or reuse container
+  let container = document.querySelector('.__pure_toast_container');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = '__pure_toast_container';
+    container.style.position = 'fixed';
+    container.style.zIndex = '9999';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column-reverse'; // new toasts on bottom, older move up
+    container.style.gap = '10px';
+    container.style.pointerEvents = 'none';
+
+    // Positioning logic
+    if (position.includes('top')) container.style.top = '16px';
+    if (position.includes('bottom')) container.style.bottom = '16px';
+    if (position.includes('left')) container.style.left = '16px';
+    if (position.includes('right')) container.style.right = '16px';
+
+    document.body.appendChild(container);
+  }
+
+  // Create the toast
+  const toast = document.createElement('div');
+  toast.className = '__pure_toast';
+  toast.textContent = message;
+  toast.style.padding = '12px 18px';
+  toast.style.background = backgroundColor;
+  toast.style.color = textColor;
+  toast.style.borderRadius = '6px';
+  toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+  toast.style.fontSize = '14px';
+  toast.style.maxWidth = '300px';
+  toast.style.opacity = '0';
+  toast.style.transform = 'translateY(20px)';
+  toast.style.transition = 'all 0.3s ease';
+  toast.style.pointerEvents = 'auto';
+
+  container.appendChild(toast);
+
+  // Animate in
+  requestAnimationFrame(() => {
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+  });
+
+  // Animate out and remove
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-20px)';
+    toast.addEventListener('transitionend', () => {
+      toast.remove();
+      if (!container.hasChildNodes()) container.remove();
+    });
+  }, duration);
+}
 
 function getToken() {
   return (
@@ -53,10 +112,8 @@ function loadStorage() {
   });
 }
 
-async function reloadPage(site) {
-  await sleep(5000);
+async function openJobSearchPage() {
   // reload the page
-  console.log('No jobs found, reloading the page...');
 
   // reload if site is same
   if (document.location.href.includes('search/warehouse-jobs')) {
@@ -67,217 +124,511 @@ async function reloadPage(site) {
   window.location.href = `https://hiring.amazon.${site}/search/warehouse-jobs#/`;
 }
 
-async function start() {
+let storage = {};
+
+let country = 'Canada';
+let locale = 'en-CA';
+let site = 'ca';
+
+function updateStorage() {
+  country = storage.site === 'ca' ? 'Canada' : 'United States';
+  locale = storage.site === 'ca' ? 'en-CA' : 'en-US';
+  site = storage.site;
+}
+
+let autoRedirectTimer = null;
+async function autoRedirect() {
+  console.log('check for auto redirect...');
   let url = document.URL;
 
-  let storage = await loadStorage();
-  console.log({ storage });
+  if (url.includes('job-opportunities')) {
+    let params = new URLSearchParams(document.location.search);
+    // TODO: withdraw application
+    clearInterval(autoRedirectTimer);
 
-  if (!storage.activated) {
-    console.log('Extension is not activated');
-    return;
-  }
-
-  try {
-    // apply for application
-    if (url.includes('application/?page')) {
-      console.log('Applying for application...');
-
-      // wait for selctor to be available
-      await waitForSelector(['.e4s17lp0.css-1ipr55l']);
-      clickElement('.e4s17lp0.css-1ipr55l');
-      return;
-    } else if (
-      (url.includes('application/us/?CS') && url.includes('/consent')) ||
-      (url.includes('application/us/?CS') && url.includes('/pre-consent')) ||
-      (url.includes('application/us/?CS') &&
-        url.includes('/no-available-shift'))
-    ) {
-      // e4s17lp0 css-1ipr55l no-available-shift
-      // candidateId - local storage: bbCandidateId
-      let interval = setInterval(async () => {
-        if (document.URL.includes('general-questions')) {
-          clearInterval(interval);
-          return;
-        }
-        await waitForSelector(['.e4s17lp0.css-1ipr55l'], 200);
-        clickElement('.e4s17lp0.css-1ipr55l');
-        console.log('Clicked on the create button');
-      }, 500);
-
-      return;
-    }
-    startProcess(storage);
-  } catch (error) {
-    console.error('Error in start function:', error);
+    toast('Withdraw application');
+    await withdrawApplication(params.get('applicationId'));
+    openJobSearchPage();
   }
 }
 
-async function startProcess(storage) {
-  let country = storage.site === 'com' ? 'United States' : 'Canada';
-  let locale = storage.site === 'com' ? 'en-US' : 'en-CA';
-  let site = storage.site;
+async function start() {
+  let url = document.URL;
 
-  let jobs = [];
-  while (jobs.length === 0) {
-    toast('Fetching jobs...');
-    jobs = await getJobs(getToken(), country, locale, site);
+  storage = await loadStorage();
+  updateStorage();
+  console.log({ storage });
 
-    let filteredJobs = jobs.filter((item) => {
-      // check for type
-      if (storage.jobType !== 'any' && !item.type.includes(storage.jobType)) {
-        console.log(`Skipping ${item.name} due to job type filter`);
-        return false;
-      }
-
-      // check for duration
-      if (
-        storage.duration !== 'any' &&
-        !item.duration.includes(storage.duration)
-      ) {
-        console.log(`Skipping ${item.name} due to duration filter`);
-        return false;
-      }
-
-      // check for location
-      let isMatch = false;
-      for (let i = 0; i < storage.locations.length; i++) {
-        const loc = storage.locations[i];
-        if (item.location.includes(loc)) {
-          isMatch = true;
-          break;
-        }
-      }
-
-      if (storage.locations.length && isMatch === false) {
-        console.log(`Skipping ${item.name} due to location filter`);
-        return false;
-      }
-
-      return true;
-    });
-
-    jobs = filteredJobs;
-
-    console.log(`Filtered jobs count: ${filteredJobs.length}`);
-
-    if (!jobs.length) continue;
-
-    // get  random job
-    let randomJob = jobs[Math.floor(Math.random() * jobs.length)];
-
-    let shifts = await getShift(
-      randomJob.jobId,
-      getToken(),
-      country,
-      locale,
-      site
-    );
-
-    console.log('Shifts:', shifts);
-
-    if (!shifts.length) {
-      jobs = [];
-      continue;
-    }
-
-    // get random shift
-    let randomShift = shifts[Math.floor(Math.random() * shifts.length)];
-    openApplicationPage(randomJob.jobId, randomShift.shiftId);
-    break;
+  if (!storage.activated) {
+    toast('Extension is not activated');
+    return;
   }
+
+  if (url.includes('bot=true')) {
+    // autoRedirectTimer = setInterval(autoRedirect.bind(this), 1000)
+  }
+
+  let allowExecute = url.includes('search/warehouse-jobs');
+  if (!allowExecute) {
+    toast('Not allowed on this page - open search/warehouse-jobs');
+    return;
+  }
+
+  toast('Extension is running');
+  startPolling();
+}
+
+let activeRequests = 0;
+let isBookingDone = false;
+
+function startPolling() {
+  let MAX_CONCURRENT = parseInt(storage.apiCallCount) || 1; // Set to 2 if you want more aggressive polling
+  let delayGap = 1000 / MAX_CONCURRENT; // milliseconds
+  const interval = setInterval(async () => {
+    if (isBookingDone) {
+      // 🎯 Found a match, stop future polling
+      clearInterval(interval);
+      toast('Processing stopped');
+      return;
+    }
+    if (activeRequests >= MAX_CONCURRENT) return;
+
+    activeRequests++;
+
+    try {
+      if (!storage.lessLog) toast('Fetching jobs...');
+      let jobs = await getJobs(getToken());
+
+      let allJobsCount = jobs.length;
+
+      // Filter jobs
+      jobs = jobs.filter((item) => {
+        if (storage.jobType !== 'any' && !item.type.includes(storage.jobType)) {
+          console.log(`Skipping ${item.name} due to job type filter`);
+          return false;
+        }
+
+        if (
+          storage.duration !== 'any' &&
+          !item.duration.includes(storage.duration)
+        ) {
+          console.log(`Skipping ${item.name} due to duration filter`);
+          return false;
+        }
+
+        if (
+          storage.locations.length > 0 &&
+          !storage.locations.some((loc) => item.location.includes(loc))
+        ) {
+          console.log(`Skipping ${item.name} due to location filter`);
+          return false;
+        }
+
+        return true;
+      });
+
+      if (allJobsCount) {
+        toast(`All jobs: ${allJobsCount} | Matched Jobs: ${jobs.length}`, {
+          backgroundColor: ' #14746f',
+        });
+      }
+
+      handleJobs(jobs);
+    } catch (err) {
+      console.error('Error in job poller:', err);
+    } finally {
+      activeRequests--;
+    }
+  }, delayGap); // Try every 200ms
 }
 
 start();
 
-function openApplicationPage(jobId, shiftId) {
-  let url = `https://hiring.amazon.com/application/?page=pre-consent&jobId=${jobId}&scheduleId=${shiftId}&CS=true&locale=en-US&token=&ssoEnabled=1`;
+/*  store shifts data
+    {
+      id: job-id + shift-id,
+      jobId: string,
+      shiftId: string,
+      date: num
+    }
+ */
+let allShifts = new Map();
+
+function autoRemoveShift(thresholdMs = 60 * 1000) {
+  // default: 10 minutes
+  const now = Date.now();
+  for (let [id, shift] of allShifts.entries()) {
+    if (now - (shift.createdAt || 0) > thresholdMs) {
+      allShifts.delete(id);
+      console.log(`Auto-removed shift ${id} (older than ${thresholdMs} ms)`);
+    }
+  }
+}
+
+setInterval(() => autoRemoveShift(), 2 * 1000);
+
+function hasJobExist(jobId) {
+  for (let shift of allShifts.values()) {
+    if (shift.jobId === jobId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+//
+
+// async function handleJobs(jobs) {
+//   // fetch all shift and add it to shifts
+//   console.log("Handling jobs:", jobs);
+//   jobs.forEach(async (job) => {
+//     // skip if old jobs are fetched
+//     let isExist = hasJobExist(job.jobId);
+//     if (isExist) return;
+
+//     openJobDetailPage(job.jobId);
+//   });
+// }
+
+// async function handleJobs(jobs) {
+//   console.log('Handling jobs:', jobs);
+
+//   // Take only 3 if more than 3, otherwise take all
+//   const jobsToProcess = jobs.slice(0, 3);
+
+//   for (const job of jobsToProcess) {
+//     let isExist = hasJobExist(job.jobId);
+//     if (isExist) continue;
+
+//     await openJobDetailPage(job.jobId);
+//   }
+// }
+
+// async function handleJobs(jobs) {
+//   // fetch all shift and add it to shifts
+//   console.log("Handling jobs:", jobs);
+//   jobs.forEach(async (job) => {
+//     // skip if old jobs are fetched
+//     let isExist = hasJobExist(job.jobId);
+//     if (isExist) return;
+//     const shifts = await getShift(job.jobId, getToken());
+
+//     toast(`Shift found: ${shifts.length}`, {
+//       backgroundColor: ' #1565c0',
+//     });
+//     console.log({ shifts });
+
+//     // add shift to array
+//     shifts.forEach((shift) => {
+//       let id = `${job.jobId} | ${shift.shiftId}`;
+
+//       allShifts.set(id, {
+//         id: id,
+//         jobId: job.jobId,
+//         shiftId: shift.shiftId,
+//         createdAt: Date.now(),
+//       });
+// openCreateApplicationPage(job.jobId, shift.shiftId);
+//     });
+//   });
+// }
+
+async function handleJobs(jobs) {
+  console.log('Handling jobs:', jobs);
+
+  // Take only first 3 jobs
+  const jobsToProcess = jobs.slice(0, 3);
+
+  for (const job of jobsToProcess) {
+    let isExist = hasJobExist(job.jobId);
+    if (isExist) continue;
+
+    const shifts = await getShift(job.jobId, getToken());
+
+    toast(`Shift found: ${shifts.length}`, {
+      backgroundColor: '#1565c0',
+    });
+    console.log({ shifts });
+
+    // Take only first 3 shifts
+    const shiftsToProcess = shifts.slice(0, 3);
+
+    for (const shift of shiftsToProcess) {
+      let id = `${job.jobId} | ${shift.shiftId}`;
+
+      allShifts.set(id, {
+        id: id,
+        jobId: job.jobId,
+        shiftId: shift.shiftId,
+        createdAt: Date.now(),
+      });
+
+      openCreateApplicationPage(job.jobId, shift.shiftId);
+    }
+  }
+}
+
+let isCreateApplicationProcessRunning = false;
+
+function getNextKey(map, currentKey) {
+  let found = false;
+  for (let key of map.keys()) {
+    if (found) return key;
+    if (key === currentKey) found = true;
+  }
+  return undefined; // No next key found
+}
+
+function getPreviousKey(map, currentKey) {
+  let prev = undefined;
+  for (let key of map.keys()) {
+    if (key === currentKey) {
+      return prev; // the previous key (or undefined if currentKey is the first)
+    }
+    prev = key;
+  }
+  return undefined; // currentKey not found
+}
+
+// used for non-bulk options
+async function triggerCreateApplicationProcess() {
+  if (isCreateApplicationProcessRunning) {
+    console.log('trigger already running');
+    return;
+  }
+
+  isCreateApplicationProcessRunning = true;
+
+  // get first key
+  // let oldApplicationKey = allShifts.keys().next().value;
+  let oldApplicationKey = [...allShifts.keys()].pop();
+  let triggerCount = 0;
+  while (oldApplicationKey) {
+    triggerCount++;
+    await handleCreateUpdateApplication(oldApplicationKey);
+    oldApplicationKey = getPreviousKey(allShifts, oldApplicationKey);
+  }
+
+  toast('Trigger closed');
+  console.log('trigger closed', triggerCount, allShifts.size);
+  isCreateApplicationProcessRunning = false;
+}
+
+async function handleCreateUpdateApplication(id) {
+  // toast('Update create application');
+  // return;
+
+  console.log({ cookie: document.cookie });
+
+  try {
+    if (isBookingDone) return;
+
+    // get shift data
+    let shift = allShifts.get(id);
+
+    // await sleep(4 * 1000)
+    // call create application api
+    toast('Apply for application');
+    let res = await createApplication(shift.jobId, shift.shiftId);
+
+    if (!res) {
+      toast('Failed to book application', { backgroundColor: ' #ff0000' });
+      return;
+    }
+    // await sleep(4 * 1000)
+
+    // call update application api
+    toast('Update application (step 1)');
+    let payload = {
+      jobId: shift.jobId,
+      scheduleId: shift.shiftId,
+    };
+    let res2 = await updateApplication(
+      res.applicationId,
+      payload,
+      'job-confirm'
+    );
+
+    if (!res2) {
+      toast('Failed to update application (step 1)', {
+        backgroundColor: ' #ff0000',
+      });
+      return;
+    }
+    // await sleep(4 * 1000)
+
+    // TODO: fix
+    let res3 = await updateApplicationStep(
+      res.applicationId,
+      'general-questions'
+    );
+    if (!res3) {
+      toast('Failed to update application step 1', {
+        backgroundColor: ' #ff0000',
+      });
+      return;
+    }
+
+    // payload = {
+    //   jobReferral: {
+    //     hasReferral: "no"
+    //   }
+    // }
+    let res4 = await updateApplication(
+      res.applicationId,
+      payload,
+      'general-questions'
+    );
+
+    if (!res4) {
+      toast('Failed to update application (step 2)', {
+        backgroundColor: ' #ff0000',
+      });
+      return;
+    }
+
+    // identification
+    let res5 = await updateApplicationStep(
+      res.applicationId,
+      'self-identification'
+    );
+    if (!res5) {
+      toast('Failed to update application step 2', {
+        backgroundColor: ' #ff0000',
+      });
+      return;
+    }
+
+    payload = {
+      selfIdentificationInfo: {
+        ethnicity: 'I choose not to Self-Identify',
+        gender: 'Male',
+      },
+    };
+
+    let res6 = await updateApplication(
+      res.applicationId,
+      payload,
+      'equal-opportunity-form'
+    );
+
+    if (!res6) {
+      toast('Failed to update application (step 3)', {
+        backgroundColor: ' #ff0000',
+      });
+      return;
+    }
+
+    isBookingDone = true;
+    await saveLogs();
+    openApplicationPage(shift.jobId, shift.shiftId, res.applicationId);
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+function openApplicationPage(jobId, shiftId, applicationId) {
+  let url = `https://hiring.amazon.${site}/application/${site}?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1#/general-questions?CS=true&jobId=${jobId}&locale=${locale}&scheduleId=${shiftId}&ssoEnabled=1&applicationId=${applicationId}&bot=true`;
   window.location.href = url;
 }
 
-function toast(message) {
-  console.log('Toast message:', message);
-  return;
-  try {
-    // eslint-disable-next-line no-undef
-    Toastify({
-      text: message,
-      className: 'info',
-      style: {
-        background: 'linear-gradient(to right, #00b09b, #96c93d)',
-      },
-    }).showToast();
-  } catch (error) {
-    console.error('Error in toast function:', error);
+function openBeforeCreate(jobId, shiftId) {
+  console.log(
+    'Opening pre-consent page...',
+    jobId,
+    shiftId,
+    jobId,
+    shiftId,
+    jobId,
+    shiftId
+  );
+  const url = new URL(`https://hiring.amazon.${site}/application/`);
+  url.searchParams.set('page', 'pre-consent');
+  url.searchParams.set('jobId', jobId);
+  url.searchParams.set('scheduleId', shiftId);
+  url.searchParams.set('CS', 'true');
+  url.searchParams.set('locale', locale);
+  url.searchParams.set('ssoEnabled', '1');
+  url.searchParams.set(
+    'token',
+    encodeURIComponent(localStorage.getItem('sessionToken'))
+  );
+
+  const finalUrl = url.toString();
+  console.log('Opening pre-consent page in new tab:', finalUrl);
+
+  // open in new tab
+  window.open(finalUrl, '_blank');
+}
+
+function openJobDetailPage(jobId) {
+  console.log('Opening pre-consent page...', jobId);
+
+  const url = new URL(
+    `https://hiring.amazon.ca/app#/jobDetail?jobId=${jobId}&locale=en-CA`
+  );
+
+  const finalUrl = url.toString();
+  console.log('Opening pre-consent page in new tab:', finalUrl);
+
+  // open in new tab
+  window.open(finalUrl, '_blank');
+}
+
+function openCreateApplicationPage(jobId, shiftId, locale = 'en-US') {
+  if (!jobId || !shiftId) {
+    console.error('❌ jobId and shiftId are required!');
+    return;
+  }
+
+  console.log('🔄 Opening pre-consent page for:', jobId, shiftId);
+
+  // Base URL for US hiring site
+
+  const path = site === 'com' ? 'us' : 'ca';
+
+  const url = new URL(`https://hiring.amazon.${site}/application/${path}/`);
+
+  // Add query params
+  url.searchParams.set('CS', 'true');
+  url.searchParams.set('jobId', jobId);
+  url.searchParams.set('locale', locale);
+  url.searchParams.set('postal', '');
+  url.searchParams.set('query', '');
+  url.searchParams.set('scheduleId', shiftId);
+  url.searchParams.set('ssoEnabled', '1');
+
+  // Add the consent hash with same query string
+  const queryString = url.searchParams.toString();
+  const finalUrl = `${url.toString()}#/consent?${queryString}`;
+
+  console.log('🌐 Opening in new tab:', finalUrl);
+
+  // Open in new tab
+  const newTab = window.open(finalUrl, '_blank', 'noopener,noreferrer');
+  if (!newTab) {
+    alert('⚠️ Popup blocked! Please allow popups for this site.');
   }
 }
 
-// multiple selector proceed when either one is available
-function waitForSelector(selectors, timeout = 10000) {
-  if (typeof selectors === 'string') selectors = [selectors];
-  return new Promise((resolve, reject) => {
-    const interval = 100;
-    let elapsed = 0;
-    const timer = setInterval(() => {
-      for (const selector of selectors) {
-        const el = document.querySelector(selector);
-        if (el) {
-          clearInterval(timer);
-          resolve(el);
-          return;
-        }
-      }
-      if ((elapsed += interval) >= timeout) {
-        clearInterval(timer);
-        reject(
-          new Error(`Timeout waiting for selectors: ${selectors.join(', ')}`)
-        );
-      }
-    }, interval);
-  });
-}
-
-function clickElement(selector) {
-  const element = document.querySelector(selector);
-  if (element) {
-    fakeUserInteraction(element);
-    const event = new MouseEvent('click', {
-      view: window,
-      bubbles: true,
-      cancelable: true,
-    });
-    element.dispatchEvent(event);
-    console.log('✅ Clicked:', selector);
-  } else {
-    console.warn('❌ Element not found:', selector);
-  }
-}
-
-function fakeUserInteraction(target) {
-  const mouseMove = new MouseEvent('mousemove', {
-    bubbles: true,
-    cancelable: true,
-    view: window,
-  });
-  const mouseDown = new MouseEvent('mousedown', {
-    bubbles: true,
-    cancelable: true,
-    view: window,
-  });
-  target.dispatchEvent(mouseMove);
-  target.dispatchEvent(mouseDown);
+function toast(message, options = {}) {
+  // console.log('Toast message:', message);
+  createToast(message, options);
 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function getJobs(
-  token,
-  country = 'United States',
-  locale = 'en-US',
-  site = 'com'
-) {
+function saveLocations(locations) {
+  let oldLocations = JSON.parse(localStorage.getItem('locations')) || [];
+
+  // merge old locations with new locations
+  locations = [...new Set([...oldLocations, ...locations])];
+  chrome.storage.local.set({ locations: locations });
+}
+
+async function getJobs(token) {
   try {
     const myHeaders = new Headers();
 
@@ -289,6 +640,8 @@ async function getJobs(
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
     );
 
+    myHeaders.append('cookie', document.cookie);
+
     const graphql = JSON.stringify({
       query:
         'query searchJobCardsByLocation($searchJobRequest: SearchJobRequest!) {\n  searchJobCardsByLocation(searchJobRequest: $searchJobRequest) {\n    jobCards {\n jobId\n employmentType\n jobTypeL10N\n scheduleCount\n locationName\n jobTitle  \n}\n  }\n}\n',
@@ -299,7 +652,7 @@ async function getJobs(
           keyWords: '',
           equalFilters: [
             { key: 'shiftType', val: 'All' },
-            { key: 'scheduleRequiredLanguage', val: 'en-US' },
+            { key: 'scheduleRequiredLanguage', val: locale },
           ],
           containFilters: [
             { key: 'isPrivateSchedule', val: ['false'] },
@@ -322,10 +675,10 @@ async function getJobs(
           ],
           orFilters: [],
           dateFilters: [
-            { key: 'firstDayOnSite', range: { startDate: '2025-06-08' } },
+            { key: 'firstDayOnSite', range: { startDate: today() } },
           ],
           sorters: [{ fieldName: 'totalPayRateMax', ascending: 'false' }],
-          pageSize: 100,
+          pageSize: 5,
           consolidateSchedule: true,
         },
       },
@@ -337,54 +690,34 @@ async function getJobs(
       redirect: 'follow',
     };
 
-    let response = await fetch(
+    let data = await fetchData(
       'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql',
-      requestOptions
+      requestOptions,
+      true
     );
 
-    if (response.ok) {
-      const data = await response.json();
-      // console.log(data);
+    let jobs = data.data.searchJobCardsByLocation.jobCards.map((job) => {
+      return {
+        jobId: job.jobId,
+        duration: job.employmentType.toLocaleLowerCase(),
+        type: job.jobTypeL10N.toLocaleLowerCase(),
+        shift: job.scheduleCount,
+        location: job.locationName.toLocaleLowerCase(),
+        name: job.jobTitle,
+      };
+    });
 
-      let jobs = data.data.searchJobCardsByLocation.jobCards.map((job) => {
-        return {
-          jobId: job.jobId,
-          duration: job.employmentType.toLocaleLowerCase(),
-          type: job.jobTypeL10N.toLocaleLowerCase(),
-          shift: job.scheduleCount,
-          location: job.locationName.toLocaleLowerCase(),
-          name: job.jobTitle,
-        };
-      });
-
-      // save locations to local storage
-      let locations = jobs.map((job) => job.location.split(',')[0]);
-      saveLocations(locations);
-      return jobs;
-    } else {
-      throw new Error('Failed to fetch data');
-    }
+    // save locations to local storage
+    let locations = jobs.map((job) => job.location.split(',')[0]);
+    saveLocations(locations);
+    return jobs;
   } catch (error) {
     console.error('Error in getJobs function:', error);
     return [];
   }
 }
 
-function saveLocations(locations) {
-  let oldLocations = JSON.parse(localStorage.getItem('locations')) || [];
-
-  // merge old locations with new locations
-  locations = [...new Set([...oldLocations, ...locations])];
-  chrome.storage.local.set({ locations: locations });
-}
-
-async function getShift(
-  jobId,
-  token,
-  country = 'United States',
-  locale = 'en-US',
-  site = 'com'
-) {
+async function getShift(jobId, token) {
   try {
     const myHeaders = new Headers();
 
@@ -395,6 +728,7 @@ async function getShift(
       'user-agent',
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
     );
+    myHeaders.append('cookie', document.cookie);
 
     const graphql = JSON.stringify({
       query:
@@ -442,32 +776,25 @@ async function getShift(
       redirect: 'follow',
     };
 
-    let response = await fetch(
+    let data = await fetchData(
       'https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql',
       requestOptions
     );
 
-    if (response.ok) {
-      const data = await response.json();
-      console.log(data);
-
-      let shifts = data.data.searchScheduleCards.scheduleCards.map((shift) => {
-        return {
-          shiftId: shift.scheduleId,
-          hours: shift.hoursPerWeek,
-        };
-      });
-      return shifts;
-    } else {
-      throw new Error('Failed to fetch data');
-    }
+    let shifts = data.data.searchScheduleCards.scheduleCards.map((shift) => {
+      return {
+        shiftId: shift.scheduleId,
+        hours: shift.hoursPerWeek,
+      };
+    });
+    return shifts;
   } catch (error) {
     console.error('Error in getShift function:', error);
     return [];
   }
 }
 
-async function createApplication(site, jobId, scheduleId) {
+async function createApplication(jobId, scheduleId) {
   // authorization token - accessToken
 
   try {
@@ -478,13 +805,14 @@ async function createApplication(site, jobId, scheduleId) {
       'user-agent',
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
     );
+    myHeaders.append('cookie', document.cookie);
 
     const raw = {
       jobId: jobId,
-      dspEnabled: true,
+      dspEnabled: false,
       scheduleId: scheduleId,
       candidateId: localStorage.getItem('bbCandidateId'),
-      activeApplicationCheckEnabled: true,
+      activeApplicationCheckEnabled: false,
     };
 
     const requestOptions = {
@@ -494,19 +822,298 @@ async function createApplication(site, jobId, scheduleId) {
       redirect: 'follow',
     };
 
-    fetch(
+    let data = await fetchData(
       `https://hiring.amazon.${site}/application/api/candidate-application/ds/create-application/`,
       requestOptions
-    )
-      .then((response) => response.text())
-      .then((result) => console.log(result))
-      .catch((error) => console.error(error));
+    );
+
+    console.log(data);
+
+    let res = data.data;
+    return { applicationId: res.applicationId };
   } catch (error) {
     console.error('Error in createApplication function:', error);
+    return null;
+  }
+}
+
+async function updateApplication(applicationId, payload, type) {
+  try {
+    const myHeaders = new Headers();
+    myHeaders.append('accept', 'application/json, text/plain, */*');
+    myHeaders.append('content-type', 'application/json;charset=UTF-8');
+    myHeaders.append('authorization', localStorage.getItem('accessToken'));
+
+    myHeaders.append(
+      'user-agent',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+    );
+    myHeaders.append('cookie', document.cookie);
+
+    const raw = JSON.stringify({
+      applicationId: applicationId,
+      payload: payload,
+      type,
+      dspEnabled: true,
+    });
+
+    const requestOptions = {
+      method: 'PUT',
+      headers: myHeaders,
+      body: raw,
+      redirect: 'follow',
+    };
+
+    let data = await fetchData(
+      `https://hiring.amazon.${site}/application/api/candidate-application/update-application`,
+      requestOptions
+    );
+
+    console.log(data);
+
+    let res = data.data;
+    return res;
+  } catch (error) {
+    console.log(error);
+    return null;
+  }
+}
+
+async function updateApplicationStep(applicationId, stepName) {
+  try {
+    const myHeaders = new Headers();
+    myHeaders.append('accept', 'application/json, text/plain, */*');
+    myHeaders.append('authorization', localStorage.getItem('accessToken'));
+    myHeaders.append('content-type', 'application/json;charset=UTF-8');
+    myHeaders.append(
+      'user-agent',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+    );
+    myHeaders.append('cookie', document.cookie);
+
+    const raw = {
+      applicationId: applicationId,
+      workflowStepName: stepName,
+    };
+
+    const requestOptions = {
+      method: 'PUT',
+      headers: myHeaders,
+      body: JSON.stringify(raw),
+      redirect: 'follow',
+    };
+
+    let res = await fetchData(
+      `https://hiring.amazon.${site}/application/api/candidate-application/update-workflow-step-name`,
+      requestOptions
+    );
+
+    console.log({ res });
+    return res.data;
+  } catch (error) {
+    console.log(error);
+    return null;
+  }
+}
+
+async function withdrawApplication(applicationId) {
+  try {
+    const myHeaders = new Headers();
+
+    myHeaders.append('authorization', localStorage.getItem('accessToken'));
+    myHeaders.append('content-type', 'application/json');
+    myHeaders.append('country', country);
+    myHeaders.append(
+      'user-agent',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36'
+    );
+    myHeaders.append('cookie', document.cookie);
+
+    const graphql = JSON.stringify({
+      query:
+        'mutation MyMutation($input: withdrawApplicationsInput!) {\n  withdrawApplications(input: $input) {\n    error\n    statusCode\n    __typename\n  }\n}\n',
+      variables: {
+        input: {
+          bbCandidateId: localStorage.getItem(bbCandidateId),
+          withdrawReason: 'Not interested in job location',
+          sfApplications: [],
+          bbApplications: [applicationId],
+        },
+      },
+    });
+    const requestOptions = {
+      method: 'POST',
+      headers: myHeaders,
+      body: graphql,
+      redirect: 'follow',
+    };
+
+    let data = await fetchData(
+      'https://zuzm2l7jovcizd7movvfj7qt3y.appsync-api.us-east-1.amazonaws.com/graphql',
+      requestOptions
+    );
+
+    console.log(data);
+
+    console.log({ res: data.data });
+    return res.data;
+  } catch (error) {
+    console.log(error);
+    return null;
   }
 }
 
 function today() {
   const today = new Date().toISOString().split('T')[0];
   return today;
+}
+
+let logsData = new Map();
+
+async function fetchData(url, options = {}, isFetchJob = false) {
+  let time = new Date().toUTCString();
+  let id = uid();
+  const response = await fetch(url, options);
+
+  let data = {
+    url: url,
+    payload: options.body,
+    method: options.method || 'GET',
+    response: null,
+    time: time,
+  };
+
+  if (!response.ok) {
+    logsData.set(id, data);
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  let responseData = await response.json();
+  data.response = responseData;
+
+  // if (isFetchJob) {
+  //   if (!responseData.data.searchJobCardsByLocation.jobCards.length) {
+  //     console.log('skipped log');
+  //     return responseData;
+  //   }
+  // }
+  logsData.set(id, data);
+  return responseData;
+}
+
+setInterval(saveLogs, 1000 * 60 * 1); // every
+
+async function saveLogs2() {
+  console.log('Saving logs...');
+  if (logsData.size < 2) return;
+
+  let keys = Array.from(logsData.keys());
+
+  let startTime = logsData.get(keys[0]).time;
+  let endTime = logsData.get(keys[keys.length - 1]).time;
+
+  const payload = {
+    sessionTime: `${startTime} - ${endTime}`,
+    data: [],
+  };
+
+  keys.forEach((key) => {
+    let data = logsData.get(key);
+    logsData.delete(key);
+    payload.data.push(data);
+  });
+
+  let res = await fetch('http://localhost:3000/log', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (res.ok) {
+    console.log('Logs saved successfully');
+  } else {
+    console.error('Failed to save logs');
+  }
+}
+
+const supabase = createClient(
+  'https://iwhfvdwcsfllmnvvwtvu.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3aGZ2ZHdjc2ZsbG1udnZ3dHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NzQ4NDcsImV4cCI6MjA3MTM1MDg0N30.C81e0a9D-mWDOCXQrgswdFLOMQEa-D5-RVIJIwUMGLg'
+);
+
+// async function saveLogs() {
+//   console.log('Saving logs...');
+//   if (logsData.size < 2) return;
+
+//   let keys = Array.from(logsData.keys());
+
+//   let startTime = logsData.get(keys[0]).time;
+//   let endTime = logsData.get(keys[keys.length - 1]).time;
+
+//   const payload = {
+//     sessionTime: `${startTime} - ${endTime}`,
+//     data: [],
+//   };
+
+//   keys.forEach((key) => {
+//     let data = logsData.get(key);
+//     logsData.delete(key);
+//     payload.data.push(data);
+//   });
+
+//   const { data, error } = await supabase.from('logs').insert([payload]);
+//   if (error) throw error;
+
+//   console.log('Log saved')
+//   console.log({data})
+//   return data;
+// }
+
+async function saveLogs() {
+  if (!logsData) return null;
+  let now = new Date().toUTCString();
+  let keys = Array.from(logsData.keys());
+
+  if (!keys.length) {
+    console.log('Log skipped due to empty map');
+    return;
+  }
+
+  // build data array from snapshot (no deletes yet)
+  const sessionItems = keys.map((k) => logsData.get(k));
+
+  const payload = {
+    session_time: ``, // display
+    start_time: now,
+    end_time: now,
+    data: sessionItems, // jsonb array
+  };
+  // payload = {
+  //   session_time: `${startTime} - ${endTime}`, // display
+  //   start_time: startTime, // queryable
+  //   end_time: endTime, // queryable
+  //   data: sessionItems, // jsonb array
+  // };
+
+  try {
+    const { data, error } = await supabase
+      .from('logs')
+      .insert([payload])
+      .select()
+      .single(); // returns the inserted row
+
+    if (error) throw error;
+
+    // only now do we clear the inserted items
+    keys.forEach((k) => logsData.delete(k));
+
+    console.log('Log saved:', data?.id ?? data);
+    return data;
+  } catch (err) {
+    console.error('Failed to save logs:', err);
+    // keep logsData intact so we can retry later
+    return null;
+  }
 }
